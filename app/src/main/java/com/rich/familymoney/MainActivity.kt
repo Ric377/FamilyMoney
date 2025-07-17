@@ -35,26 +35,18 @@ class MainActivity : ComponentActivity() {
         val auth = Firebase.auth
         val db = Firebase.firestore
 
-        // Включаем офлайн-кэш для Firestore
-        // Это нужно сделать до первых операций с базой данных
         val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
             .setPersistenceEnabled(true)
             .build()
         db.firestoreSettings = settings
 
-        // Современный способ обработки результата от Google Sign-In
         val googleSignInLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
             val data = result.data
             if (result.resultCode == RESULT_OK && data != null) {
                 lifecycleScope.launch {
-                    val success = authRepository.handleGoogleSignInResult(data)
-                    if (success) {
-                        // Тело if намеренно оставлено пустым.
-                        // Состояние пользователя обновляется через AuthStateListener,
-                        // и UI перерисовывается автоматически.
-                    }
+                    authRepository.handleGoogleSignInResult(data)
                 }
             }
         }
@@ -65,8 +57,6 @@ class MainActivity : ComponentActivity() {
                 var groupId by remember { mutableStateOf<String?>(null) }
                 var loading by remember { mutableStateOf(true) }
 
-                // Этот слушатель будет автоматически обновлять currentUser
-                // при входе или выходе из системы.
                 DisposableEffect(Unit) {
                     val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
                         currentUser = firebaseAuth.currentUser
@@ -75,54 +65,54 @@ class MainActivity : ComponentActivity() {
                     onDispose { auth.removeAuthStateListener(listener) }
                 }
 
-                // Улучшенная логика загрузки данных
                 LaunchedEffect(currentUser?.uid) {
                     loading = true
-                    groupId = null // Сбрасываем groupId при смене пользователя
-
+                    groupId = null
                     currentUser?.uid?.let { uid ->
                         try {
                             val document = db.collection("users").document(uid).get().await()
                             groupId = document.getString("groupId")
                         } catch (e: Exception) {
                             Log.e("MainActivity", "Ошибка при загрузке данных пользователя", e)
-                            // groupId уже null, так что дополнительно ничего делать не нужно
                         }
                     }
                     loading = false
                 }
 
-                when {
-                    currentUser == null -> {
-                        AuthScreen(
-                            authRepository = authRepository,
-                            onGoogleSignInClick = {
-                                val intent = authRepository.getGoogleSignInClient(this@MainActivity).signInIntent
-                                googleSignInLauncher.launch(intent)
-                            },
-                            onAuthSuccess = {
-                                // Состояние обновится автоматически через AuthStateListener
-                            }
-                        )
-                    }
-                    loading -> {
+                // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: Используем более простую и надежную структуру if/else ---
+                if (currentUser == null) {
+                    // Пользователь не авторизован
+                    AuthScreen(
+                        authRepository = authRepository,
+                        onGoogleSignInClick = {
+                            val intent = authRepository.getGoogleSignInClient(this@MainActivity).signInIntent
+                            googleSignInLauncher.launch(intent)
+                        },
+                        onAuthSuccess = {}
+                    )
+                } else {
+                    // Пользователь авторизован, проверяем состояние загрузки и группу
+                    if (loading) {
                         LoadingScreen()
-                    }
-                    groupId != null -> {
-                        MainNavigation(
-                            groupId = groupId,
-                            onLogoutClick = {
-                                authRepository.logout(this@MainActivity)
-                                // Состояние обновится автоматически
-                            }
-                        )
-                    }
-                    else -> {
-                        JoinGroupScreen(onGroupJoined = { newGroupId ->
-                            groupId = newGroupId
-                        })
+                    } else {
+                        val currentGroupId = groupId
+                        if (currentGroupId != null) {
+                            // Все проверки пройдены, показываем главный экран
+                            MainNavigation(
+                                groupId = currentGroupId, // Теперь здесь точно не будет ошибки
+                                onLogoutClick = {
+                                    authRepository.logout(this@MainActivity)
+                                }
+                            )
+                        } else {
+                            // Пользователь авторизован, но не состоит в группе
+                            JoinGroupScreen(onGroupJoined = { newGroupId ->
+                                groupId = newGroupId
+                            })
+                        }
                     }
                 }
+                // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             }
         }
     }

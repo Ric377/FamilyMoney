@@ -2,12 +2,17 @@
 package com.rich.familymoney.ui
 
 import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,9 +22,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.SetOptions
@@ -27,28 +34,27 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import com.rich.familymoney.data.Payment
+import com.rich.familymoney.repository.GroupRepository
+import com.rich.familymoney.viewmodel.MainViewModel
+import com.rich.familymoney.viewmodel.MainViewModelFactory
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
-import androidx.compose.ui.res.painterResource
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import java.util.*
-
-private data class Member(val name: String, val photoUrl: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
+    groupId: String,
     onAddPaymentClick: () -> Unit,
     onLeaveGroupClick: () -> Unit,
-    onLogoutClick: () -> Unit
+    onLogoutClick: () -> Unit,
+    viewModel: MainViewModel = viewModel(
+        factory = MainViewModelFactory(groupId, GroupRepository())
+    )
 ) {
-    val db = Firebase.firestore
-    val storage = Firebase.storage
+    val state by viewModel.uiState.collectAsState()
+
     val user = Firebase.auth.currentUser ?: return
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -56,24 +62,19 @@ fun MainScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val snack = remember { SnackbarHostState() }
 
-    var groupId by remember { mutableStateOf<String?>(null) }
-    var userName by remember { mutableStateOf(user.displayName ?: "") }
-    var userPhoto by remember { mutableStateOf("") }
-    var payments by remember { mutableStateOf(emptyList<Payment>()) }
-    var members by remember { mutableStateOf(emptyList<Member>()) }
-
     val months = listOf(
         "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
         "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
     )
     var selectedMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
-    var showEdit by remember { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<Payment?>(null) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var paymentToDelete by remember { mutableStateOf<Payment?>(null) }
 
+    var userName by remember { mutableStateOf(user.displayName ?: "") }
+    var userPhoto by remember { mutableStateOf(user.photoUrl?.toString() ?: "") }
     LaunchedEffect(user.uid) {
-        db.collection("users").document(user.uid).addSnapshotListener { d, _ ->
+        Firebase.firestore.collection("users").document(user.uid).addSnapshotListener { d, _ ->
             if (d != null && d.exists()) {
-                groupId = d.getString("groupId")
                 userName = d.getString("name") ?: userName
                 userPhoto = d.getString("photoUrl") ?: userPhoto
             }
@@ -81,62 +82,9 @@ fun MainScreen(
     }
 
 
-    LaunchedEffect(groupId) {
-        groupId?.let { gid ->
-            // 👇 ВСТАВКА: автообновление members
-            val gRef = db.collection("groups").document(gid)
-            val snap = gRef.get().await()
-            val raw = snap.get("members")
-            if (raw is List<*> && raw.any { it !is Map<*, *> }) {
-                val updated = raw.mapNotNull { item ->
-                    val email = item as? String ?: return@mapNotNull null
-                    val userDoc = db.collection("users")
-                        .whereEqualTo("email", email).get().await().documents.firstOrNull()
-                    if (userDoc != null) {
-                        mapOf(
-                            "email" to email,
-                            "name" to (userDoc.getString("name") ?: email.substringBefore('@')),
-                            "photoUrl" to (userDoc.getString("photoUrl") ?: "")
-                        )
-                    } else null
-                }
-                gRef.update("members", updated).await()
-            }
-
-
-            db.collection("groups").document(gid)
-                .collection("payments")
-                .addSnapshotListener { s, _ ->
-                    payments = s?.documents?.mapNotNull { doc ->
-                        val sum = doc.getDouble("sum") ?: return@mapNotNull null
-                        val comment = doc.getString("comment") ?: ""
-                        val date = doc.getTimestamp("date")?.toDate()?.time ?: 0L
-                        val name = doc.getString("name") ?: "?"
-                        val photo = doc.getString("photoUrl") ?: ""
-                        Payment(doc.id, sum, comment, date, name, photo)
-                    } ?: emptyList()
-                }
-
-            db.collection("groups").document(gid).addSnapshotListener { d, _ ->
-                val rawMembers = d?.get("members")
-                members = if (rawMembers is List<*>) {
-                    rawMembers.mapNotNull { item ->
-                        val map = item as? Map<*, *> ?: return@mapNotNull null
-                        val name = (map["name"] as? String)?.ifBlank { null }
-                            ?: (map["email"] as? String ?: "?").substringBefore('@')
-                        val photo = map["photoUrl"] as? String ?: ""
-                        Member(name, photo)
-                    }
-                } else emptyList()
-
-            }
-        }
-    }
-
-
     val calendar = remember { Calendar.getInstance() }
-    val monthPayments = payments
-        .sortedByDescending { it.date } // ← вот ключ
+    val monthPayments = state.payments
+        .sortedByDescending { it.date }
         .filter {
             calendar.timeInMillis = it.date
             calendar.get(Calendar.MONTH) == selectedMonth
@@ -150,9 +98,7 @@ fun MainScreen(
         drawerContent = {
             ModalDrawerSheet {
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
+                    Modifier.fillMaxWidth().padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (userPhoto.startsWith("drawable/")) {
@@ -172,38 +118,31 @@ fun MainScreen(
                             modifier = Modifier.size(48.dp).clip(CircleShape)
                         )
                     }
-
-
                     Spacer(Modifier.width(12.dp))
                     Text(userName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    Icon(Icons.Default.Edit, null, Modifier.clickable { showEdit = true })
+                    Icon(Icons.Default.Edit, null, Modifier.clickable { showEditDialog = true })
                 }
-                groupId?.let { gid ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Код группы: $gid", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        IconButton({
-                            clipboard.setText(AnnotatedString(gid))
-                            scope.launch { snack.showSnackbar("Код скопирован") }
-                        }) { Icon(Icons.Default.ContentCopy, null) }
-                    }
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Код группы: $groupId", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    IconButton({
+                        clipboard.setText(AnnotatedString(groupId))
+                        scope.launch { snack.showSnackbar("Код скопирован") }
+                    }) { Icon(Icons.Default.ContentCopy, null) }
                 }
-                if (members.isNotEmpty()) {
+
+                if (state.members.isNotEmpty()) {
                     Text("Участники:", Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
-                    members.forEach {
+                    state.members.forEach { member ->
                         Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (it.photoUrl.startsWith("drawable/")) {
+                            if (member.photoUrl.startsWith("drawable/")) {
                                 val resId = LocalContext.current.resources.getIdentifier(
-                                    it.photoUrl.removePrefix("drawable/"), "drawable", LocalContext.current.packageName
+                                    member.photoUrl.removePrefix("drawable/"), "drawable", LocalContext.current.packageName
                                 )
                                 Image(
                                     painter = painterResource(id = resId),
@@ -211,19 +150,20 @@ fun MainScreen(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.size(32.dp).clip(CircleShape)
                                 )
-                            } else if (it.photoUrl.isNotBlank()) {
+                            } else if (member.photoUrl.isNotBlank()) {
                                 AsyncImage(
-                                    it.photoUrl, null,
+                                    member.photoUrl, null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.size(32.dp).clip(CircleShape)
                                 )
                             }
                             Spacer(Modifier.width(8.dp))
-                            Text(it.name)
+                            Text(member.name)
                         }
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 }
+
                 NavigationDrawerItem(
                     label = { Text("Сменить группу") },
                     selected = false,
@@ -253,64 +193,71 @@ fun MainScreen(
             },
             floatingActionButton = { FloatingActionButton(onAddPaymentClick) { Text("+") } }
         ) { padding ->
-            val scrollState = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .padding(16.dp)
-                    .verticalScroll(scrollState)
-                    .fillMaxSize()
-            ) {
-                LazyRow(Modifier.fillMaxWidth()) {
-                    items(months.indices.toList()) { i ->
-                        val sel = i == selectedMonth
-                        Text(
-                            months[i],
-                            style = if (sel) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(end = 12.dp).clickable { selectedMonth = i }
-                        )
-                    }
+            if (state.isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-                Spacer(Modifier.height(16.dp))
-                Text("Всего: ${fmt(totalSum)} ₽")
-                sumByUser.forEach { (n, v) -> Text("$n — ${fmt(v)} ₽") }
-                Spacer(Modifier.height(16.dp))
-                if (monthPayments.isEmpty()) {
-                    Text("Нет трат", style = MaterialTheme.typography.bodyLarge)
-                } else {
-                    monthPayments.forEach { PaymentItem(it) { pendingDelete = it } }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .padding(padding)
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState())
+                        .fillMaxSize()
+                ) {
+                    LazyRow(Modifier.fillMaxWidth()) {
+                        items(months.indices.toList()) { i ->
+                            val sel = i == selectedMonth
+                            Text(
+                                months[i],
+                                style = if (sel) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(end = 12.dp).clickable { selectedMonth = i }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text("Всего: ${fmt(totalSum)} ₽")
+                    sumByUser.forEach { (n, v) -> Text("$n — ${fmt(v)} ₽") }
+                    Spacer(Modifier.height(16.dp))
+                    if (monthPayments.isEmpty()) {
+                        Text("Нет трат", style = MaterialTheme.typography.bodyLarge)
+                    } else {
+                        monthPayments.forEach { payment ->
+                            PaymentItem(payment) {
+                                paymentToDelete = it
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    pendingDelete?.let { p ->
+    paymentToDelete?.let { p ->
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
+            onDismissRequest = { paymentToDelete = null },
             title = { Text("Удалить запись?") },
             text = { Text("Трата на ${fmt(p.sum)} ₽ будет удалена.") },
             confirmButton = {
                 TextButton({
-                    groupId?.let { gid ->
-                        db.collection("groups").document(gid)
-                            .collection("payments").document(p.id).delete()
-                    }
-                    pendingDelete = null
+                    viewModel.deletePayment(p.id)
+                    paymentToDelete = null
                 }) { Text("Удалить") }
             },
-            dismissButton = { TextButton({ pendingDelete = null }) { Text("Отмена") } }
+            dismissButton = { TextButton({ paymentToDelete = null }) { Text("Отмена") } }
         )
     }
 
-    if (showEdit) {
+    if (showEditDialog) {
         EditProfileDialog(
             currentName = userName,
             currentPhotoUrl = userPhoto,
-            onDismiss = { showEdit = false },
+            onDismiss = { showEditDialog = false },
             onSave = { newName, newPhoto ->
                 scope.launch {
                     val finalName = newName.ifBlank { userName }
                     var finalPhoto = newPhoto.ifBlank { userPhoto }
+                    val storage = Firebase.storage
 
                     if (newPhoto.startsWith("content://")) {
                         try {
@@ -319,51 +266,39 @@ fun MainScreen(
                             ref.putFile(Uri.parse(newPhoto)).await()
                             finalPhoto = ref.downloadUrl.await().toString()
                         } catch (e: Exception) {
-                            snack.showSnackbar("Ошибка загрузки аватара")
+                            scope.launch { snack.showSnackbar("Ошибка загрузки аватара") }
                         }
                     }
 
+                    val db = Firebase.firestore
                     db.collection("users").document(user.uid)
                         .set(mapOf("name" to finalName, "photoUrl" to finalPhoto), SetOptions.merge())
                         .await()
 
-                    groupId?.let { gid ->
-                        val gRef = db.collection("groups").document(gid)
-                        val snap = gRef.get().await()
-                        val rawMembers = snap.get("members")
-                        val arr = if (rawMembers is List<*>) {
-                            rawMembers.mapNotNull { item ->
-                                val map = item as? Map<*, *> ?: return@mapNotNull null
-                                if (map["email"] == user.email) {
-                                    mapOf(
-                                        "email" to user.email,
-                                        "name" to finalName,
-                                        "photoUrl" to finalPhoto
-                                    )
-                                } else map
-                            }
-                        } else emptyList()
-
-
+                    val gRef = db.collection("groups").document(groupId)
+                    val snap = gRef.get().await()
+                    val rawMembers = snap.get("members")
+                    if (rawMembers is List<*>) {
+                        val arr = rawMembers.mapNotNull { item ->
+                            val map = item as? Map<*, *> ?: return@mapNotNull null
+                            if (map["email"] == user.email) {
+                                mapOf("email" to user.email, "name" to finalName, "photoUrl" to finalPhoto)
+                            } else map
+                        }
                         gRef.update("members", arr).await()
                     }
 
-                    val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
-                        .setDisplayName(finalName)
-                        .apply {
+                    user.updateProfile(
+                        com.google.firebase.auth.userProfileChangeRequest {
+                            displayName = finalName
                             if (finalPhoto.isNotBlank()) {
-                                setPhotoUri(Uri.parse(finalPhoto))
+                                photoUri = Uri.parse(finalPhoto)
                             }
                         }
-                        .build()
+                    ).await()
 
-                    user.updateProfile(profileUpdates)
-
-
-                    userName = finalName
-                    userPhoto = finalPhoto
-                    showEdit = false
-                    snack.showSnackbar("Профиль сохранён")
+                    showEditDialog = false
+                    scope.launch { snack.showSnackbar("Профиль сохранён") }
                 }
             }
         )
@@ -390,7 +325,6 @@ private fun EditProfileDialog(
 
     val avatarList = (1..17).map { "avatar_$it" }
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -438,40 +372,15 @@ private fun EditProfileDialog(
             }
         },
         confirmButton = {
-            TextButton({
-                onSave(name.trim(), selectedAvatar)
-
-                // 🔄 Обновление всех операций
-                val finalName = name.trim()
-                val finalPhoto = selectedAvatar
-                val db = Firebase.firestore
-                val user = Firebase.auth.currentUser
-                val groupIdRef = db.collection("users").document(user!!.uid)
-
-                scope.launch {
-                    val groupIdSnap = groupIdRef.get().await()
-                    val groupId = groupIdSnap.getString("groupId") ?: return@launch
-                    val paymentsRef = db.collection("groups").document(groupId).collection("payments")
-                    val docs = paymentsRef.whereEqualTo("name", finalName).get().await()
-                    docs.documents.forEach { doc ->
-                        paymentsRef.document(doc.id).update("photoUrl", finalPhoto)
-                    }
-                }
-
-            }) {
-                Text("Сохранить")
-            }
+            TextButton({ onSave(name.trim(), selectedAvatar) }) { Text("Сохранить") }
         },
         dismissButton = { TextButton(onDismiss) { Text("Отмена") } }
     )
 }
 
-
-
 @Composable
 private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
-    val db = Firebase.firestore
     val context = LocalContext.current
 
     var showEdit by remember { mutableStateOf(false) }
@@ -481,25 +390,22 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
     Card(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp) // внешний отступ карточки
+            .padding(vertical = 4.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 1.dp) // убрал лишний отступ внутри
+            modifier = Modifier.padding(8.dp)
         ) {
             if (p.photoUrl.startsWith("drawable/")) {
                 val resId = context.resources.getIdentifier(
-                    p.photoUrl.removePrefix("drawable/"),
-                    "drawable",
-                    context.packageName
+                    p.photoUrl.removePrefix("drawable/"), "drawable", context.packageName
                 )
                 Image(
                     painter = painterResource(id = resId),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .padding(start = 8.dp) // немного сдвинем аватар
-                        .size(50.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                 )
             } else {
@@ -507,20 +413,15 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                     p.photoUrl, null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(50.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                 )
             }
 
-            Spacer(Modifier.width(8.dp))
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp) // справа от текста
-            ) {
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(fmt(p.sum) + " ₽", style = MaterialTheme.typography.titleMedium)
-                if (p.comment.isNotBlank()) Text(p.comment)
+                if (p.comment.isNotBlank()) Text(p.comment, style = MaterialTheme.typography.bodyMedium)
                 Text(sdf.format(Date(p.date)), style = MaterialTheme.typography.bodySmall)
                 Text(p.name, style = MaterialTheme.typography.bodySmall)
             }
@@ -535,8 +436,6 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
             }
         }
     }
-
-
 
     if (showEdit) {
         AlertDialog(
@@ -564,16 +463,14 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                     if (updatedSum != null) {
                         val user = Firebase.auth.currentUser
                         if (user != null) {
+                            val db = Firebase.firestore
                             val userDoc = db.collection("users").document(user.uid)
                             userDoc.get().addOnSuccessListener { snapshot ->
                                 val groupId = snapshot.getString("groupId")
                                 if (!groupId.isNullOrBlank()) {
                                     db.collection("groups").document(groupId)
                                         .collection("payments").document(p.id)
-                                        .update(mapOf(
-                                            "sum" to updatedSum,
-                                            "comment" to newComment
-                                        ))
+                                        .update(mapOf("sum" to updatedSum, "comment" to newComment))
                                 }
                             }
                         }
@@ -591,5 +488,3 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
         )
     }
 }
-
-
