@@ -7,13 +7,31 @@ import com.rich.familymoney.data.Payment
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import java.util.Date
+import kotlinx.coroutines.tasks.await
+import java.util.*
 
 data class GroupMember(val name: String, val photoUrl: String, val email: String)
 
 class GroupRepository {
 
     private val db = Firebase.firestore
+
+    // Получает ВСЕ траты группы один раз для расчёта
+    suspend fun getAllPayments(groupId: String): List<Payment> {
+        val snapshot = db.collection("groups").document(groupId)
+            .collection("payments").get().await()
+
+        return snapshot.documents.mapNotNull { doc ->
+            Payment(
+                id = doc.id,
+                sum = doc.getDouble("sum") ?: 0.0,
+                comment = doc.getString("comment") ?: "",
+                date = doc.getTimestamp("date")?.toDate()?.time ?: 0L,
+                name = doc.getString("name") ?: "?",
+                photoUrl = doc.getString("photoUrl") ?: ""
+            )
+        }
+    }
 
     fun getPayments(groupId: String): Flow<List<Payment>> = callbackFlow {
         val collection = db.collection("groups").document(groupId).collection("payments")

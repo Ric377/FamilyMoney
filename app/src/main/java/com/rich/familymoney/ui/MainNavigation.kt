@@ -10,13 +10,15 @@ import androidx.navigation.compose.rememberNavController
 @Composable
 fun MainNavigation(
     navController: NavHostController = rememberNavController(),
-    groupId: String, // <-- Изменили на Non-nullable
+    groupId: String,
     onLogoutClick: () -> Unit
 ) {
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             MainScreen(
-                groupId = groupId, // <-- Передаём groupId в MainScreen
+                groupId = groupId,
+                // Передаём NavController, чтобы из MainScreen можно было навигироваться
+                navController = navController,
                 onAddPaymentClick = { navController.navigate("addPayment") },
                 onLeaveGroupClick = { /* TODO */ },
                 onLogoutClick = onLogoutClick
@@ -27,6 +29,13 @@ fun MainNavigation(
                 groupId = groupId,
                 onBack = { navController.popBackStack() }
             )
+        }
+        // --- НОВЫЙ МАРШРУТ ---
+        composable("debt_screen/{groupId}") { backStackEntry ->
+            val screenGroupId = backStackEntry.arguments?.getString("groupId")
+            if (screenGroupId != null) {
+                DebtScreen(groupId = screenGroupId, navController = navController)
+            }
         }
     }
 }

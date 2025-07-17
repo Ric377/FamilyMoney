@@ -27,6 +27,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.SetOptions
@@ -46,6 +47,7 @@ import java.util.*
 @Composable
 fun MainScreen(
     groupId: String,
+    navController: NavHostController,
     onAddPaymentClick: () -> Unit,
     onLeaveGroupClick: () -> Unit,
     onLogoutClick: () -> Unit,
@@ -163,6 +165,16 @@ fun MainScreen(
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 }
+
+                NavigationDrawerItem(
+                    label = { Text("Расчёт долгов") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        navController.navigate("debt_screen/$groupId")
+                    },
+                    icon = { Icon(Icons.Default.Calculate, null) }
+                )
 
                 NavigationDrawerItem(
                     label = { Text("Сменить группу") },
