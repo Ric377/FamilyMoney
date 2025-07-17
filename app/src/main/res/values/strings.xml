@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Family Money</string>
+
+    <!-- Web client_id для Google Sign-In -->
+    <string name="default_web_client_id">965519537654-1o79m7go9hm5s37ftpghg49t8o2ns8b6.apps.googleusercontent.com</string>
 </resources>

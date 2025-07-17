@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "965519537654",
+    "project_id": "family-money-fdde5",
+    "storage_bucket": "family-money-fdde5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:965519537654:android:68d9a11fd408f22d9ec3d7",
+        "android_client_info": {
+          "package_name": "com.rich.familymoney"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "965519537654-dl16is8gan0s6sh06fsb73oiueagbbae.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rich.familymoney",
+            "certificate_hash": "f13b26fbcd86fa584f7d9e8a6c42e1de1e898c9a"
+          }
+        },
+        {
+          "client_id": "965519537654-lptuhm09f8iu2a6i545r77f15vm1ufhf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rich.familymoney",
+            "certificate_hash": "90c36e6cfa031ab0d5172c1a499b98ea186bbaca"
+          }
+        },
+        {
+          "client_id": "965519537654-1o79m7go9hm5s37ftpghg49t8o2ns8b6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4P05DXhKJylRmUXBMJiHPgfp6kkIxux8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "965519537654-1o79m7go9hm5s37ftpghg49t8o2ns8b6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

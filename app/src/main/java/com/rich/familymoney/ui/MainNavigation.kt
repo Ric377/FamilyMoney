@@ -1,0 +1,30 @@
+package com.rich.familymoney.ui
+
+import androidx.compose.runtime.Composable
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+
+@Composable
+fun MainNavigation(
+    navController: NavHostController = rememberNavController(),
+    groupId: String?,
+    onLogoutClick: () -> Unit
+) {
+    NavHost(navController = navController, startDestination = "home") {
+        composable("home") {
+            MainScreen(
+                onAddPaymentClick = { navController.navigate("addPayment") },
+                onLeaveGroupClick = { /* TODO */ },
+                onLogoutClick = onLogoutClick
+            )
+        }
+        composable("addPayment") {
+            AddPaymentScreen(
+                groupId = groupId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+    }
+}
