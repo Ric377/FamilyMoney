@@ -35,6 +35,13 @@ class MainActivity : ComponentActivity() {
         val auth = Firebase.auth
         val db = Firebase.firestore
 
+        // Включаем офлайн-кэш для Firestore
+        // Это нужно сделать до первых операций с базой данных
+        val settings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+            .setPersistenceEnabled(true)
+            .build()
+        db.firestoreSettings = settings
+
         // Современный способ обработки результата от Google Sign-In
         val googleSignInLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()

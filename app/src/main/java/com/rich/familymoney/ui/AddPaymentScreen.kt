@@ -1,9 +1,9 @@
-// AddPaymentScreen.kt
 package com.rich.familymoney.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.ktx.auth
@@ -23,7 +23,7 @@ fun AddPaymentScreen(
 ) {
     val db = Firebase.firestore
     val user = Firebase.auth.currentUser
-    val scope = rememberCoroutineScope() // Используем rememberCoroutineScope
+    val scope = rememberCoroutineScope()
 
     var sum by remember { mutableStateOf("") }
     var comment by remember { mutableStateOf("") }
@@ -64,10 +64,7 @@ fun AddPaymentScreen(
                 Text(errorText!!, color = MaterialTheme.colorScheme.error)
             }
 
-            if (isLoading) {
-                CircularProgressIndicator()
-            }
-
+            // Кнопка Сохранить
             Button(
                 onClick = {
                     val parsedSum = sum.toDoubleOrNull()
@@ -85,6 +82,9 @@ fun AddPaymentScreen(
                     isLoading = true
                     scope.launch {
                         try {
+                            // Сначала получаем данные пользователя.
+                            // Эта операция использует .await(), т.к. нам нужны эти данные для записи.
+                            // Если их нет в кеше, при офлайне здесь возникнет ошибка.
                             val userDoc = db.collection("users").document(uid).get().await()
                             val name = userDoc.getString("name") ?: "?"
                             val photoUrl = userDoc.getString("photoUrl") ?: ""
@@ -96,29 +96,39 @@ fun AddPaymentScreen(
                                 "name" to name,
                                 "photoUrl" to photoUrl
                             )
+
+                            // ИСПРАВЛЕНИЕ: Добавляем трату в очередь БЕЗ .await()
+                            // Firestore SDK сам поставит запись в очередь и отправит при появлении сети.
                             db.collection("groups").document(groupId)
                                 .collection("payments")
                                 .add(payment)
-                                .await() // Ждем завершения
 
-                            // Безопасное обновление UI из главного потока
+                            // Сразу же возвращаемся на предыдущий экран
                             withContext(Dispatchers.Main) {
                                 onBack()
                             }
+
                         } catch (e: Exception) {
+                            // Этот блок сработает, если, например, данные пользователя не были
+                            // загружены в кеш и интернет отсутствует.
                             withContext(Dispatchers.Main) {
-                                errorText = "Ошибка сохранения: ${e.message}"
-                            }
-                        } finally {
-                            withContext(Dispatchers.Main) {
+                                errorText = "Ошибка. Проверьте интернет и попробуйте снова."
                                 isLoading = false
                             }
                         }
                     }
                 },
-                enabled = !isLoading
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Сохранить")
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Сохранить")
+                }
             }
         }
     }
