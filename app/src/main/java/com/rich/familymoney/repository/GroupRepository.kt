@@ -16,6 +16,20 @@ class GroupRepository {
 
     private val db = Firebase.firestore
 
+    // --- МЕТОД ДЛЯ МАССОВОГО УДАЛЕНИЯ ---
+    suspend fun deletePayments(groupId: String, paymentIds: List<String>) {
+        if (paymentIds.isEmpty()) return
+
+        val collection = db.collection("groups").document(groupId).collection("payments")
+        // Используем WriteBatch для эффективного выполнения нескольких операций
+        val batch = db.batch()
+        paymentIds.forEach { id ->
+            batch.delete(collection.document(id))
+        }
+        batch.commit().await() // .await() из kotlinx-coroutines-play-services
+    }
+    // --- КОНЕЦ НОВОГО МЕТОДА ---
+
     // Получает ВСЕ траты группы один раз для расчёта
     suspend fun getAllPayments(groupId: String): List<Payment> {
         val snapshot = db.collection("groups").document(groupId)

@@ -42,6 +42,16 @@ class MainViewModel(
         }
     }
 
+    fun deletePayments(paymentIds: List<String>) {
+        viewModelScope.launch {
+            try {
+                repository.deletePayments(groupId, paymentIds)
+            } catch (e: Exception) {
+                // TODO: Обработать ошибку
+            }
+        }
+    }
+
     fun deletePayment(paymentId: String) {
         viewModelScope.launch {
             try {

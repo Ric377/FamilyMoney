@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.compose.ui.text.style.TextOverflow
 import coil.compose.AsyncImage
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.SetOptions
@@ -56,6 +57,7 @@ fun MainScreen(
     )
 ) {
     val state by viewModel.uiState.collectAsState()
+
 
     val user = Firebase.auth.currentUser ?: return
     val context = LocalContext.current
@@ -392,64 +394,89 @@ private fun EditProfileDialog(
 
 @Composable
 private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
+    // Дата форматируется, как и раньше
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
 
+    // Локальное состояние для диалога редактирования
     var showEdit by remember { mutableStateOf(false) }
-    var newSum by remember { mutableStateOf(p.sum.toString()) }
-    var newComment by remember { mutableStateOf(p.comment) }
 
     Card(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            // Отступы, которые мы настроили в прошлый раз
+            .padding(vertical = 2.dp)
+            .clickable { showEdit = true }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(8.dp)
+            modifier = Modifier.padding(vertical = 6.dp, horizontal = 8.dp)
         ) {
+            // ЛОГИКА АВАТАРОВ
             if (p.photoUrl.startsWith("drawable/")) {
+                // Логика для локальных аватаров из папки drawable
                 val resId = context.resources.getIdentifier(
                     p.photoUrl.removePrefix("drawable/"), "drawable", context.packageName
                 )
                 Image(
                     painter = painterResource(id = resId),
-                    contentDescription = null,
+                    contentDescription = p.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(40.dp)
+                        .clip(CircleShape)
+                )
+            } else if (p.photoUrl.isNotBlank()){
+                // Логика для аватаров из сети (Firebase Storage)
+                AsyncImage(
+                    p.photoUrl,
+                    contentDescription = p.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(40.dp)
                         .clip(CircleShape)
                 )
             } else {
-                AsyncImage(
-                    p.photoUrl, null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
+                // Заглушка, если фото вообще нет
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = "Default Avatar",
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
 
             Spacer(Modifier.width(12.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(fmt(p.sum) + " ₽", style = MaterialTheme.typography.titleMedium)
-                if (p.comment.isNotBlank()) Text(p.comment, style = MaterialTheme.typography.bodyMedium)
+
+                // Поле для комментария теперь всегда занимает одну строку.
+                // Если комментарий пустой, используется неразрывный пробел, чтобы занять место.
+                // Длинные комментарии обрезаются.
+                Text(
+                    text = p.comment.ifBlank { "\u00A0" }, // \u00A0 - это неразрывный пробел
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
                 Text(sdf.format(Date(p.date)), style = MaterialTheme.typography.bodySmall)
                 Text(p.name, style = MaterialTheme.typography.bodySmall)
             }
 
-            Column {
-                IconButton({ showEdit = true }) {
-                    Icon(Icons.Default.Edit, null)
-                }
-                IconButton({ askDel(p) }) {
-                    Icon(Icons.Default.Delete, null)
-                }
+            // Кнопка удаления, как и договаривались
+            IconButton({ askDel(p) }) {
+                Icon(Icons.Default.Delete, contentDescription = "Удалить")
             }
         }
     }
 
+    // Диалог редактирования остаётся без изменений
     if (showEdit) {
+        var newSum by remember { mutableStateOf(p.sum.toString()) }
+        var newComment by remember { mutableStateOf(p.comment) }
+
         AlertDialog(
             onDismissRequest = { showEdit = false },
             title = { Text("Редактировать трату") },
