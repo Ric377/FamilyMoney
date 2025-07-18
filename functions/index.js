@@ -6,11 +6,11 @@ const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
-setGlobalOptions({region: "europe-west1"}); // Указываем регион, это хорошая практика
+setGlobalOptions({region: "europe-west1"});
 
 /**
  * Триггер, который срабатывает при создании нового документа
- * в любой подколлекции 'payments'. Написан на новом синтаксисе v2.
+ * в любой подколлекции 'payments'.
  */
 exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{paymentId}", async (event) => {
     // 1. Получаем данные о новой трате
@@ -22,7 +22,7 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
     const paymentData = snap.data();
     const creatorName = paymentData.name;
     const sum = paymentData.sum;
-    const groupId = event.params.groupId; // Новый способ получить параметр
+    const groupId = event.params.groupId;
     const creatorEmail = paymentData.email;
 
     if (!creatorEmail) {
@@ -54,7 +54,7 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
 
     const tokens = recipientUsersSnapshot.docs
         .map((doc) => doc.data().fcmToken)
-        .filter((token) => token);
+        .filter((token) => token); // Отсеиваем пустые или отсутствующие токены
 
     if (tokens.length === 0) {
         logger.log("No FCM tokens found for any recipients.");
@@ -62,13 +62,30 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
     }
 
     // 5. Создаём и отправляем уведомление
+    // ИЗМЕНЕНИЕ: Используем 'data' payload, чтобы onMessageReceived
+    // срабатывал всегда (и в фоне, и когда приложение открыто).
     const payload = {
-        notification: {
+        data: {
             title: `Новая трата в группе!`,
             body: `${creatorName} добавил(а) трату на ${sum} ₽`,
+            // Можно передавать и другие данные, например, ID группы или платежа
+            // groupId: groupId,
         },
     };
 
-    logger.log("Sending notification to tokens:", tokens);
-    return admin.messaging().sendToDevice(tokens, payload);
+    logger.log("Sending data message to tokens:", tokens);
+
+    // Отправляем сообщение на все найденные токены
+    const response = await admin.messaging().sendToDevice(tokens, payload);
+
+    // (Опционально) Добавляем обработку ошибок и удаление невалидных токенов
+    response.results.forEach((result, index) => {
+        const error = result.error;
+        if (error) {
+            logger.error("Failure sending notification to", tokens[index], error);
+            // Здесь можно добавить логику для удаления невалидного токена из Firestore
+        }
+    });
+
+    return response;
 });
