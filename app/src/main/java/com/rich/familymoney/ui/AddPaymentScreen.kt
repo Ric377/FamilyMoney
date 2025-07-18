@@ -1,9 +1,11 @@
 package com.rich.familymoney.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.ktx.auth
@@ -13,6 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,6 +32,11 @@ fun AddPaymentScreen(
     var comment by remember { mutableStateOf("") }
     var errorText by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+
+    // КОММЕНТАРИЙ: Состояние для хранения даты и показа календаря
+    var selectedDate by remember { mutableStateOf(Date()) } // По умолчанию - сегодня
+    var showDatePicker by remember { mutableStateOf(false) }
+    val sdf = remember { SimpleDateFormat("dd MMMM yyyy", Locale("ru")) }
 
     Scaffold(
         topBar = {
@@ -60,11 +68,33 @@ fun AddPaymentScreen(
                 enabled = !isLoading
             )
 
+            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 1 - Добавлено поле для выбора даты
+            // НОВЫЙ КОД:
+            Box {
+                OutlinedTextField(
+                    value = sdf.format(selectedDate),
+                    onValueChange = {},
+                    label = { Text("Дата") },
+                    trailingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Выбрать дату") },
+                    modifier = Modifier.fillMaxWidth(),
+                    // КОММЕНТАРИЙ: Поле теперь активно, но ввод запрещён.
+                    // Это заставляет его выглядеть так же, как и остальные поля.
+                    enabled = true,
+                    readOnly = true
+                )
+                // КОММЕНТАРИЙ: Невидимая область для нажатий остаётся,
+                // чтобы гарантированно открывать календарь.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clickable { showDatePicker = true }
+                )
+            }
+
             if (errorText != null) {
                 Text(errorText!!, color = MaterialTheme.colorScheme.error)
             }
 
-            // Кнопка Сохранить
             Button(
                 onClick = {
                     val parsedSum = sum.toDoubleOrNull()
@@ -82,35 +112,28 @@ fun AddPaymentScreen(
                     isLoading = true
                     scope.launch {
                         try {
-                            // Сначала получаем данные пользователя.
-                            // Эта операция использует .await(), т.к. нам нужны эти данные для записи.
-                            // Если их нет в кеше, при офлайне здесь возникнет ошибка.
                             val userDoc = db.collection("users").document(uid).get().await()
                             val name = userDoc.getString("name") ?: "?"
                             val photoUrl = userDoc.getString("photoUrl") ?: ""
 
+                            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 2 - При сохранении используется выбранная дата
                             val payment = hashMapOf(
                                 "sum" to parsedSum,
                                 "comment" to comment,
-                                "date" to Date(),
+                                "date" to selectedDate, // <-- ИЗМЕНЕНИЕ ЗДЕСЬ
                                 "name" to name,
                                 "photoUrl" to photoUrl
                             )
 
-                            // ИСПРАВЛЕНИЕ: Добавляем трату в очередь БЕЗ .await()
-                            // Firestore SDK сам поставит запись в очередь и отправит при появлении сети.
                             db.collection("groups").document(groupId)
                                 .collection("payments")
                                 .add(payment)
 
-                            // Сразу же возвращаемся на предыдущий экран
                             withContext(Dispatchers.Main) {
                                 onBack()
                             }
 
                         } catch (e: Exception) {
-                            // Этот блок сработает, если, например, данные пользователя не были
-                            // загружены в кеш и интернет отсутствует.
                             withContext(Dispatchers.Main) {
                                 errorText = "Ошибка. Проверьте интернет и попробуйте снова."
                                 isLoading = false
@@ -130,6 +153,29 @@ fun AddPaymentScreen(
                     Text("Сохранить")
                 }
             }
+        }
+    }
+
+    // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 3 - Добавлен диалог с календарём
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.time)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            selectedDate = Date(it)
+                        }
+                        showDatePicker = false
+                    }
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Отмена") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }
