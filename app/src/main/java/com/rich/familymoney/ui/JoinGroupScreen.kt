@@ -76,7 +76,9 @@ fun JoinGroupScreen(onGroupJoined: (String) -> Unit) {
                             )
 
                             db.collection("groups").document(newGroupId).set(groupData).await()
-                            db.collection("users").document(uid).update("groupId", newGroupId).await()
+                            // Используем безопасный метод set-merge
+                            db.collection("users").document(uid)
+                                .set(mapOf("groupId" to newGroupId), SetOptions.merge()).await()
 
                             withContext(Dispatchers.Main) {
                                 onGroupJoined(newGroupId)
@@ -136,8 +138,9 @@ fun JoinGroupScreen(onGroupJoined: (String) -> Unit) {
                                 db.collection("groups").document(joinCode)
                                     .update("members", FieldValue.arrayUnion(newMember)).await()
 
+                                // ИСПРАВЛЕНИЕ ЗДЕСЬ: Заменяем .update() на .set(..., SetOptions.merge())
                                 db.collection("users").document(uid)
-                                    .update("groupId", joinCode).await()
+                                    .set(mapOf("groupId" to joinCode), SetOptions.merge()).await()
 
                                 withContext(Dispatchers.Main) {
                                     onGroupJoined(joinCode)

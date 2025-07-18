@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -63,12 +64,15 @@ fun ChangeGroupScreen(onBack: () -> Unit) {
                             )
                         )
 
+                        // НОВЫЙ КОД:
                         db.collection("groups").document(newGroupId).set(data).await()
+
+                        // КОММЕНТАРИЙ: Безопасно обновляем groupId для текущего пользователя, используя newGroupId
                         db.collection("users").document(uid)
-                            .update("groupId", newGroupId).await()
+                            .set(mapOf("groupId" to newGroupId), SetOptions.merge()).await()
 
                         withContext(Dispatchers.Main) {
-                            onBack()
+                            onBack() // КОММЕНТАРИЙ: Возвращаемся на предыдущий экран, как и должно быть
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
