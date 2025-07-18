@@ -2,9 +2,6 @@
 <project version="4">
   <component name="deploymentTargetSelector">
     <selectionStates>
-      <SelectionState runConfigName="app">
-        <option name="selectionMode" value="DROPDOWN" />
-      </SelectionState>
       <SelectionState runConfigName="FamilyMoney.app">
         <option name="selectionMode" value="DROPDOWN" />
         <DropdownSelection timestamp="2025-04-26T13:05:34.706350600Z">

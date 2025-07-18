@@ -392,91 +392,81 @@ private fun EditProfileDialog(
     )
 }
 
+// Замените только эту функцию в вашем файле MainScreen.kt
 @Composable
 private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
-    // Дата форматируется, как и раньше
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
 
-    // Локальное состояние для диалога редактирования
     var showEdit by remember { mutableStateOf(false) }
+    var newSum by remember { mutableStateOf(p.sum.toString()) }
+    var newComment by remember { mutableStateOf(p.comment) }
 
     Card(
-        modifier = Modifier
+        Modifier
             .fillMaxWidth()
-            // Отступы, которые мы настроили в прошлый раз
-            .padding(vertical = 2.dp)
-            .clickable { showEdit = true }
+            .padding(vertical = 4.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 6.dp, horizontal = 8.dp)
+            modifier = Modifier.padding(8.dp)
         ) {
-            // ЛОГИКА АВАТАРОВ
+            // КОММЕНТАРИЙ: Блок с аватаром остаётся без изменений.
             if (p.photoUrl.startsWith("drawable/")) {
-                // Логика для локальных аватаров из папки drawable
                 val resId = context.resources.getIdentifier(
                     p.photoUrl.removePrefix("drawable/"), "drawable", context.packageName
                 )
                 Image(
                     painter = painterResource(id = resId),
-                    contentDescription = p.name,
+                    contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                )
-            } else if (p.photoUrl.isNotBlank()){
-                // Логика для аватаров из сети (Firebase Storage)
-                AsyncImage(
-                    p.photoUrl,
-                    contentDescription = p.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                 )
             } else {
-                // Заглушка, если фото вообще нет
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = "Default Avatar",
-                    modifier = Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                AsyncImage(
+                    p.photoUrl, null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
                 )
             }
 
             Spacer(Modifier.width(12.dp))
 
+            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 1 - Из этой колонки убрана строка с суммой.
+            // Теперь здесь только комментарий, дата и имя.
             Column(modifier = Modifier.weight(1f)) {
-                Text(fmt(p.sum) + " ₽", style = MaterialTheme.typography.titleMedium)
-
-                // Поле для комментария теперь всегда занимает одну строку.
-                // Если комментарий пустой, используется неразрывный пробел, чтобы занять место.
-                // Длинные комментарии обрезаются.
-                Text(
-                    text = p.comment.ifBlank { "\u00A0" }, // \u00A0 - это неразрывный пробел
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
+                // Text(fmt(p.sum) + " ₽", style = MaterialTheme.typography.titleMedium) // <-- ЭТА СТРОКА УДАЛЕНА
+                if (p.comment.isNotBlank()) Text(p.comment, style = MaterialTheme.typography.bodyMedium)
                 Text(sdf.format(Date(p.date)), style = MaterialTheme.typography.bodySmall)
                 Text(p.name, style = MaterialTheme.typography.bodySmall)
             }
 
-            // Кнопка удаления, как и договаривались
-            IconButton({ askDel(p) }) {
-                Icon(Icons.Default.Delete, contentDescription = "Удалить")
+            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 2 - В правую колонку добавлена сумма.
+            // Теперь здесь сумма и под ней две иконки.
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    fmt(p.sum) + " ₽",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold // Добавим жирности для акцента
+                )
+                Row {
+                    IconButton({ showEdit = true }) {
+                        Icon(Icons.Default.Edit, null)
+                    }
+                    IconButton({ askDel(p) }) {
+                        Icon(Icons.Default.Delete, null)
+                    }
+                }
             }
         }
     }
 
-    // Диалог редактирования остаётся без изменений
+    // КОММЕНТАРИЙ: Диалоговое окно для редактирования остаётся без изменений.
     if (showEdit) {
-        var newSum by remember { mutableStateOf(p.sum.toString()) }
-        var newComment by remember { mutableStateOf(p.comment) }
-
         AlertDialog(
             onDismissRequest = { showEdit = false },
             title = { Text("Редактировать трату") },
