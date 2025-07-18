@@ -81,6 +81,8 @@ fun MainScreen(
         "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
     )
     var selectedMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
+    var selectedYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
+
     var showEditDialog by remember { mutableStateOf(false) }
     var paymentToDelete by remember { mutableStateOf<Payment?>(null) }
 
@@ -100,7 +102,7 @@ fun MainScreen(
         .sortedByDescending { it.date }
         .filter {
             calendar.timeInMillis = it.date
-            calendar.get(Calendar.MONTH) == selectedMonth
+            calendar.get(Calendar.MONTH) == selectedMonth && calendar.get(Calendar.YEAR) == selectedYear
         }
 
     val totalSum = monthPayments.sumOf { it.sum }
@@ -259,16 +261,41 @@ fun MainScreen(
                         .verticalScroll(rememberScrollState())
                         .fillMaxSize()
                 ) {
-                    LazyRow(Modifier.fillMaxWidth()) {
-                        items(months.indices.toList()) { i ->
-                            val sel = i == selectedMonth
-                            Text(
-                                months[i],
-                                style = if (sel) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier
-                                    .padding(end = 12.dp)
-                                    .clickable { selectedMonth = i }
-                            )
+                    // ИЗМЕНЕННЫЙ КОД:
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        // КОММЕНТАРИЙ: Кнопка "назад", которая меняет месяц и год
+                        IconButton(onClick = {
+                            if (selectedMonth == 0) {
+                                selectedMonth = 11
+                                selectedYear--
+                            } else {
+                                selectedMonth--
+                            }
+                        }) {
+                            Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Предыдущий месяц")
+                        }
+
+                        // КОММЕНТАРИЙ: Текст, который показывает текущий месяц и год
+                        Text(
+                            text = "${months[selectedMonth]} $selectedYear",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+
+                        // КОММЕНТАРИЙ: Кнопка "вперед", которая меняет месяц и год
+                        IconButton(onClick = {
+                            if (selectedMonth == 11) {
+                                selectedMonth = 0
+                                selectedYear++
+                            } else {
+                                selectedMonth++
+                            }
+                        }) {
+                            Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Следующий месяц")
                         }
                     }
                     Spacer(Modifier.height(16.dp))
