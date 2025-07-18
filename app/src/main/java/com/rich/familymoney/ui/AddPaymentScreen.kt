@@ -130,7 +130,8 @@ fun AddPaymentScreen(
                                 "comment" to comment,
                                 "date" to selectedDate,
                                 "name" to name,
-                                "photoUrl" to photoUrl
+                                "photoUrl" to photoUrl,
+                                "email" to (user?.email ?: "")
                             )
 
                             db.collection("groups").document(groupId)
