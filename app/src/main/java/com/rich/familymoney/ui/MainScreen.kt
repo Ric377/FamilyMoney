@@ -76,12 +76,18 @@ fun MainScreen(
         selectedPayments = emptySet()
     }
 
-    val months = listOf(
-        "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-        "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
-    )
-    var selectedMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
+    val months = listOf("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь")
     var selectedYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
+    var selectedMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
+    var showDatePicker by remember { mutableStateOf(false) } // Для показа календаря
+
+    val availableYears = remember(state.payments) {
+        val calendar = Calendar.getInstance()
+        state.payments.map {
+            calendar.timeInMillis = it.date
+            calendar.get(Calendar.YEAR)
+        }.toSet().sortedDescending().ifEmpty { listOf(Calendar.getInstance().get(Calendar.YEAR)) }
+    }
 
     var showEditDialog by remember { mutableStateOf(false) }
     var paymentToDelete by remember { mutableStateOf<Payment?>(null) }
@@ -254,56 +260,87 @@ fun MainScreen(
                     CircularProgressIndicator()
                 }
             } else {
+                // ЗАМЕНИТЕ ВСЮ КОЛОНКУ НА ЭТОТ КОД:
                 Column(
                     modifier = Modifier
                         .padding(padding)
-                        .padding(16.dp)
+                        .padding(horizontal = 16.dp) // Горизонтальные отступы для всего экрана
                         .verticalScroll(rememberScrollState())
                         .fillMaxSize()
                 ) {
-                    // ИЗМЕНЕННЫЙ КОД:
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        // КОММЕНТАРИЙ: Кнопка "назад", которая меняет месяц и год
-                        IconButton(onClick = {
-                            if (selectedMonth == 0) {
-                                selectedMonth = 11
-                                selectedYear--
-                            } else {
-                                selectedMonth--
-                            }
-                        }) {
-                            Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Предыдущий месяц")
-                        }
+                    Spacer(Modifier.height(16.dp)) // Добавляем отступ сверху
 
-                        // КОММЕНТАРИЙ: Текст, который показывает текущий месяц и год
-                        Text(
-                            text = "${months[selectedMonth]} $selectedYear",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-
-                        // КОММЕНТАРИЙ: Кнопка "вперед", которая меняет месяц и год
-                        IconButton(onClick = {
-                            if (selectedMonth == 11) {
-                                selectedMonth = 0
-                                selectedYear++
-                            } else {
-                                selectedMonth++
+                    // ПРАВИЛЬНАЯ ВЕРСИЯ ПЕРЕКЛЮЧАТЕЛЯ
+                    OutlinedCard {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            IconButton(onClick = {
+                                if (selectedMonth == 0) {
+                                    selectedMonth = 11; selectedYear--
+                                } else {
+                                    selectedMonth--
+                                }
+                            }) {
+                                Icon(Icons.Default.KeyboardArrowLeft, "Предыдущий месяц")
                             }
-                        }) {
-                            Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Следующий месяц")
+
+                            Row(
+                                modifier = Modifier
+                                    .clickable { showDatePicker = true }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${months[selectedMonth]} $selectedYear",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Icon(Icons.Default.CalendarMonth, "Выбрать дату", Modifier.padding(start = 8.dp))
+                            }
+
+                            IconButton(onClick = {
+                                if (selectedMonth == 11) {
+                                    selectedMonth = 0; selectedYear++
+                                } else {
+                                    selectedMonth++
+                                }
+                            }) {
+                                Icon(Icons.Default.KeyboardArrowRight, "Следующий месяц")
+                            }
                         }
                     }
+
                     Spacer(Modifier.height(16.dp))
                     Text("Всего: ${fmt(totalSum)} ₽")
                     sumByUser.forEach { (n, v) -> Text("$n — ${fmt(v)} ₽") }
                     Spacer(Modifier.height(16.dp))
                     if (monthPayments.isEmpty()) {
-                        Text("Нет трат", style = MaterialTheme.typography.bodyLarge)
+                        // УЛУЧШЕННЫЙ ЭКРАН "НЕТ ТРАТ"
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.ReceiptLong,
+                                    contentDescription = "Нет трат",
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "В этом месяце трат нет",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    "Нажмите '+' чтобы добавить первую",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
                     } else {
                         monthPayments.forEach { payment ->
                             PaymentItem(
@@ -410,6 +447,38 @@ fun MainScreen(
                 }
             }
         )
+    }
+    // КОММЕНТАРИЙ: Добавляем диалог с календарём в конец функции MainScreen
+    if (showDatePicker) {
+        // Запоминаем состояние календаря, инициализируя его текущей выбранной датой
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = Calendar.getInstance().apply {
+                set(Calendar.YEAR, selectedYear)
+                set(Calendar.MONTH, selectedMonth)
+            }.timeInMillis
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // При нажатии "OK" обновляем выбранный год и месяц
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val newCalendar = Calendar.getInstance().apply { timeInMillis = millis }
+                            selectedYear = newCalendar.get(Calendar.YEAR)
+                            selectedMonth = newCalendar.get(Calendar.MONTH)
+                        }
+                        showDatePicker = false
+                    }
+                ) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Отмена") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 }
 
@@ -639,4 +708,5 @@ private fun PaymentItem(
             }
         )
     }
+
 }
