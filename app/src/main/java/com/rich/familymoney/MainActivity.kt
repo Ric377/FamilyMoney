@@ -14,6 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import android.os.Build
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
@@ -26,11 +30,31 @@ import com.rich.familymoney.ui.theme.FamilyMoneyTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
+// ЗАМЕНИТЕ ВЕСЬ КЛАСС MainActivity НА ЭТОТ КОД:
 class MainActivity : ComponentActivity() {
     private val authRepository = AuthRepository()
 
+    // КОММЕНТАРИЙ: Код для запроса разрешений. Он на своём месте.
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        // Здесь можно обработать ответ, если нужно
+    }
+
+    private fun askNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    // КОММЕНТАРИЙ: Теперь у нас только ОДИН метод onCreate, как и должно быть.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // КОММЕНТАРИЙ: Вызов запроса разрешений теперь находится здесь, в правильном месте.
+        askNotificationPermission()
 
         val auth = Firebase.auth
         val db = Firebase.firestore
@@ -79,9 +103,7 @@ class MainActivity : ComponentActivity() {
                     loading = false
                 }
 
-                // --- ИСПРАВЛЕНИЕ ЗДЕСЬ: Используем более простую и надежную структуру if/else ---
                 if (currentUser == null) {
-                    // Пользователь не авторизован
                     AuthScreen(
                         authRepository = authRepository,
                         onGoogleSignInClick = {
@@ -91,28 +113,24 @@ class MainActivity : ComponentActivity() {
                         onAuthSuccess = {}
                     )
                 } else {
-                    // Пользователь авторизован, проверяем состояние загрузки и группу
                     if (loading) {
                         LoadingScreen()
                     } else {
                         val currentGroupId = groupId
                         if (currentGroupId != null) {
-                            // Все проверки пройдены, показываем главный экран
                             MainNavigation(
-                                groupId = currentGroupId, // Теперь здесь точно не будет ошибки
+                                groupId = currentGroupId,
                                 onLogoutClick = {
                                     authRepository.logout(this@MainActivity)
                                 }
                             )
                         } else {
-                            // Пользователь авторизован, но не состоит в группе
                             JoinGroupScreen(onGroupJoined = { newGroupId ->
                                 groupId = newGroupId
                             })
                         }
                     }
                 }
-                // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
             }
         }
     }
