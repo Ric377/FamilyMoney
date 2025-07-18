@@ -400,23 +400,15 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
 
-    // КОММЕНТАРИЙ: Добавляем новое состояние для показа диалога с действиями
-    var showActionsDialog by remember { mutableStateOf(false) }
+    // КОММЕНТАРИЙ: Оставляем только одно состояние - для показа диалога редактирования
     var showEditDialog by remember { mutableStateOf(false) }
 
-    // КОММЕНТАРИЙ: Используем detectTapGestures для отслеживания долгого нажатия
     Card(
+        // КОММЕНТАРИЙ: Вместо долгого нажатия теперь обычное нажатие (clickable)
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = {
-                        // КОММЕНТАРИЙ: По долгому нажатию показываем новое диалоговое окно
-                        showActionsDialog = true
-                    }
-                )
-            }
+            .clickable { showEditDialog = true } // <-- ИЗМЕНЕНИЕ ЗДЕСЬ
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -456,45 +448,11 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
             )
-
-            // КОММЕНТАРИЙ: Колонка с иконками "Редактировать" и "Удалить" полностью удалена отсюда
         }
     }
 
-    // КОММЕНТАРИЙ: НОВЫЙ ДИАЛОГ - появляется по долгому нажатию
-    if (showActionsDialog) {
-        AlertDialog(
-            onDismissRequest = { showActionsDialog = false },
-            title = { Text("Выберите действие") },
-            text = {
-                Column {
-                    Text("Что вы хотите сделать с тратой на ${fmt(p.sum)} ₽?")
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showActionsDialog = false
-                        showEditDialog = true // Открываем диалог редактирования
-                    }
-                ) {
-                    Text("Редактировать")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showActionsDialog = false
-                        askDel(p) // Запускаем логику удаления
-                    }
-                ) {
-                    Text("Удалить")
-                }
-            }
-        )
-    }
-
-    // КОММЕНТАРИЙ: Старый диалог редактирования теперь вызывается из нового диалога
+    // КОММЕНТАРИЙ: Диалог выбора действий удалён.
+    // Теперь по нажатию сразу открывается этот диалог редактирования.
     if (showEditDialog) {
         var newSum by remember { mutableStateOf(p.sum.toString()) }
         var newComment by remember { mutableStateOf(p.comment) }
@@ -522,18 +480,17 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                 TextButton(onClick = {
                     val updatedSum = newSum.toDoubleOrNull()
                     if (updatedSum != null) {
+                        // TODO: Перенести эту логику в ViewModel
                         val user = Firebase.auth.currentUser
                         if (user != null) {
                             val db = Firebase.firestore
-                            user.uid.let { uid ->
-                                val userDoc = db.collection("users").document(uid)
-                                userDoc.get().addOnSuccessListener { snapshot ->
-                                    val groupId = snapshot.getString("groupId")
-                                    if (!groupId.isNullOrBlank()) {
-                                        db.collection("groups").document(groupId)
-                                            .collection("payments").document(p.id)
-                                            .update(mapOf("sum" to updatedSum, "comment" to newComment))
-                                    }
+                            val userDoc = db.collection("users").document(user.uid)
+                            userDoc.get().addOnSuccessListener { snapshot ->
+                                val groupId = snapshot.getString("groupId")
+                                if (!groupId.isNullOrBlank()) {
+                                    db.collection("groups").document(groupId)
+                                        .collection("payments").document(p.id)
+                                        .update(mapOf("sum" to updatedSum, "comment" to newComment))
                                 }
                             }
                         }
@@ -544,8 +501,20 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
-                    Text("Отмена")
+                // КОММЕНТАРИЙ: Добавляем кнопку "Удалить" прямо сюда
+                Row {
+                    TextButton(
+                        onClick = {
+                            showEditDialog = false
+                            askDel(p)
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Удалить")
+                    }
+                    TextButton(onClick = { showEditDialog = false }) {
+                        Text("Отмена")
+                    }
                 }
             }
         )
