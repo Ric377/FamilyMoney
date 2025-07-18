@@ -300,7 +300,6 @@ fun MainScreen(
                                     text = "${months[selectedMonth]} $selectedYear",
                                     style = MaterialTheme.typography.titleMedium
                                 )
-                                Icon(Icons.Default.CalendarMonth, "Выбрать дату", Modifier.padding(start = 8.dp))
                             }
 
                             IconButton(onClick = {
@@ -456,7 +455,7 @@ fun MainScreen(
         MonthYearPickerDialog(
             initialYear = selectedYear,
             initialMonth = selectedMonth,
-            availableYears = availableYears,
+            // availableYears удалён
             months = months,
             onDismiss = { showMonthYearPicker = false },
             onConfirm = { year, month ->
@@ -696,12 +695,10 @@ private fun PaymentItem(
     }
 }
 
-// ДОБАВЬТЕ ЭТУ НОВУЮ ФУНКЦИЮ В КОНЕЦ ФАЙЛА
 @Composable
 private fun MonthYearPickerDialog(
     initialYear: Int,
     initialMonth: Int,
-    availableYears: List<Int>,
     months: List<String>,
     onDismiss: () -> Unit,
     onConfirm: (year: Int, month: Int) -> Unit
@@ -712,18 +709,13 @@ private fun MonthYearPickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            // Переключатель года
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
-                IconButton(onClick = {
-                    val yearIndex = availableYears.indexOf(selectedYear)
-                    if (yearIndex < availableYears.size - 1) {
-                        selectedYear = availableYears[yearIndex + 1]
-                    }
-                }) {
+                // КОММЕНТАРИЙ: Логика кнопок теперь просто уменьшает или увеличивает год
+                IconButton(onClick = { selectedYear-- }) {
                     Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Предыдущий год")
                 }
                 Text(
@@ -731,18 +723,12 @@ private fun MonthYearPickerDialog(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(horizontal = 24.dp)
                 )
-                IconButton(onClick = {
-                    val yearIndex = availableYears.indexOf(selectedYear)
-                    if (yearIndex > 0) {
-                        selectedYear = availableYears[yearIndex - 1]
-                    }
-                }) {
+                IconButton(onClick = { selectedYear++ }) {
                     Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Следующий год")
                 }
             }
         },
         text = {
-            // Сетка с месяцами
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 contentPadding = PaddingValues(top = 16.dp)
@@ -763,14 +749,10 @@ private fun MonthYearPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(selectedYear, selectedMonth) }) {
-                Text("OK")
-            }
+            TextButton(onClick = { onConfirm(selectedYear, selectedMonth) }) { Text("OK") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
+            TextButton(onClick = onDismiss) { Text("Отмена") }
         }
     )
 }
