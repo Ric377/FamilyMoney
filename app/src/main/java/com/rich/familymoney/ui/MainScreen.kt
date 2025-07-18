@@ -33,6 +33,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import coil.compose.AsyncImage
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.SetOptions
@@ -79,7 +82,7 @@ fun MainScreen(
     val months = listOf("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь")
     var selectedYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
     var selectedMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
-    var showDatePicker by remember { mutableStateOf(false) } // Для показа календаря
+    var showMonthYearPicker by remember { mutableStateOf(false) } // Для показа нашего нового диалога
 
     val availableYears = remember(state.payments) {
         val calendar = Calendar.getInstance()
@@ -270,7 +273,7 @@ fun MainScreen(
                 ) {
                     Spacer(Modifier.height(16.dp)) // Добавляем отступ сверху
 
-                    // ПРАВИЛЬНАЯ ВЕРСИЯ ПЕРЕКЛЮЧАТЕЛЯ
+                    // ПЕРЕКЛЮЧАТЕЛЬ
                     OutlinedCard {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -289,7 +292,7 @@ fun MainScreen(
 
                             Row(
                                 modifier = Modifier
-                                    .clickable { showDatePicker = true }
+                                    .clickable { showMonthYearPicker = true }
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -448,37 +451,20 @@ fun MainScreen(
             }
         )
     }
-    // КОММЕНТАРИЙ: Добавляем диалог с календарём в конец функции MainScreen
-    if (showDatePicker) {
-        // Запоминаем состояние календаря, инициализируя его текущей выбранной датой
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = Calendar.getInstance().apply {
-                set(Calendar.YEAR, selectedYear)
-                set(Calendar.MONTH, selectedMonth)
-            }.timeInMillis
-        )
 
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        // При нажатии "OK" обновляем выбранный год и месяц
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val newCalendar = Calendar.getInstance().apply { timeInMillis = millis }
-                            selectedYear = newCalendar.get(Calendar.YEAR)
-                            selectedMonth = newCalendar.get(Calendar.MONTH)
-                        }
-                        showDatePicker = false
-                    }
-                ) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Отмена") }
+    if (showMonthYearPicker) {
+        MonthYearPickerDialog(
+            initialYear = selectedYear,
+            initialMonth = selectedMonth,
+            availableYears = availableYears,
+            months = months,
+            onDismiss = { showMonthYearPicker = false },
+            onConfirm = { year, month ->
+                selectedYear = year
+                selectedMonth = month
+                showMonthYearPicker = false
             }
-        ) {
-            DatePicker(state = datePickerState)
-        }
+        )
     }
 }
 
@@ -708,5 +694,84 @@ private fun PaymentItem(
             }
         )
     }
-
 }
+
+// ДОБАВЬТЕ ЭТУ НОВУЮ ФУНКЦИЮ В КОНЕЦ ФАЙЛА
+@Composable
+private fun MonthYearPickerDialog(
+    initialYear: Int,
+    initialMonth: Int,
+    availableYears: List<Int>,
+    months: List<String>,
+    onDismiss: () -> Unit,
+    onConfirm: (year: Int, month: Int) -> Unit
+) {
+    var selectedYear by remember { mutableStateOf(initialYear) }
+    var selectedMonth by remember { mutableStateOf(initialMonth) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            // Переключатель года
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                IconButton(onClick = {
+                    val yearIndex = availableYears.indexOf(selectedYear)
+                    if (yearIndex < availableYears.size - 1) {
+                        selectedYear = availableYears[yearIndex + 1]
+                    }
+                }) {
+                    Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Предыдущий год")
+                }
+                Text(
+                    text = selectedYear.toString(),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
+                IconButton(onClick = {
+                    val yearIndex = availableYears.indexOf(selectedYear)
+                    if (yearIndex > 0) {
+                        selectedYear = availableYears[yearIndex - 1]
+                    }
+                }) {
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Следующий год")
+                }
+            }
+        },
+        text = {
+            // Сетка с месяцами
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                contentPadding = PaddingValues(top = 16.dp)
+            ) {
+                itemsIndexed(months) { index, month ->
+                    TextButton(
+                        onClick = { selectedMonth = index },
+                        shape = MaterialTheme.shapes.medium,
+                        colors = if (selectedMonth == index) {
+                            ButtonDefaults.textButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        } else {
+                            ButtonDefaults.textButtonColors()
+                        }
+                    ) {
+                        Text(month.take(3))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selectedYear, selectedMonth) }) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Отмена")
+            }
+        }
+    )
+}
+
