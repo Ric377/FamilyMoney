@@ -29,6 +29,8 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import coil.compose.AsyncImage
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.SetOptions
@@ -398,20 +400,29 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
 
-    var showEdit by remember { mutableStateOf(false) }
-    var newSum by remember { mutableStateOf(p.sum.toString()) }
-    var newComment by remember { mutableStateOf(p.comment) }
+    // КОММЕНТАРИЙ: Добавляем новое состояние для показа диалога с действиями
+    var showActionsDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
 
+    // КОММЕНТАРИЙ: Используем detectTapGestures для отслеживания долгого нажатия
     Card(
-        Modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = {
+                        // КОММЕНТАРИЙ: По долгому нажатию показываем новое диалоговое окно
+                        showActionsDialog = true
+                    }
+                )
+            }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(8.dp)
         ) {
-            // КОММЕНТАРИЙ: Блок с аватаром остаётся без изменений.
+            // Аватар (без изменений)
             if (p.photoUrl.startsWith("drawable/")) {
                 val resId = context.resources.getIdentifier(
                     p.photoUrl.removePrefix("drawable/"), "drawable", context.packageName
@@ -420,55 +431,76 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                     painter = painterResource(id = resId),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
+                    modifier = Modifier.size(48.dp).clip(CircleShape)
                 )
             } else {
                 AsyncImage(
                     p.photoUrl, null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
+                    modifier = Modifier.size(48.dp).clip(CircleShape)
                 )
             }
 
             Spacer(Modifier.width(12.dp))
 
-            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 1 - Из этой колонки убрана строка с суммой.
-            // Теперь здесь только комментарий, дата и имя.
+            // Колонка с информацией (без изменений)
             Column(modifier = Modifier.weight(1f)) {
-                // Text(fmt(p.sum) + " ₽", style = MaterialTheme.typography.titleMedium) // <-- ЭТА СТРОКА УДАЛЕНА
                 if (p.comment.isNotBlank()) Text(p.comment, style = MaterialTheme.typography.bodyMedium)
                 Text(sdf.format(Date(p.date)), style = MaterialTheme.typography.bodySmall)
                 Text(p.name, style = MaterialTheme.typography.bodySmall)
             }
 
-            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 2 - В правую колонку добавлена сумма.
-            // Теперь здесь сумма и под ней две иконки.
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    fmt(p.sum) + " ₽",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold // Добавим жирности для акцента
-                )
-                Row {
-                    IconButton({ showEdit = true }) {
-                        Icon(Icons.Default.Edit, null)
-                    }
-                    IconButton({ askDel(p) }) {
-                        Icon(Icons.Default.Delete, null)
-                    }
-                }
-            }
+            // Сумма (без изменений)
+            Text(
+                fmt(p.sum) + " ₽",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+
+            // КОММЕНТАРИЙ: Колонка с иконками "Редактировать" и "Удалить" полностью удалена отсюда
         }
     }
 
-    // КОММЕНТАРИЙ: Диалоговое окно для редактирования остаётся без изменений.
-    if (showEdit) {
+    // КОММЕНТАРИЙ: НОВЫЙ ДИАЛОГ - появляется по долгому нажатию
+    if (showActionsDialog) {
         AlertDialog(
-            onDismissRequest = { showEdit = false },
+            onDismissRequest = { showActionsDialog = false },
+            title = { Text("Выберите действие") },
+            text = {
+                Column {
+                    Text("Что вы хотите сделать с тратой на ${fmt(p.sum)} ₽?")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showActionsDialog = false
+                        showEditDialog = true // Открываем диалог редактирования
+                    }
+                ) {
+                    Text("Редактировать")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showActionsDialog = false
+                        askDel(p) // Запускаем логику удаления
+                    }
+                ) {
+                    Text("Удалить")
+                }
+            }
+        )
+    }
+
+    // КОММЕНТАРИЙ: Старый диалог редактирования теперь вызывается из нового диалога
+    if (showEditDialog) {
+        var newSum by remember { mutableStateOf(p.sum.toString()) }
+        var newComment by remember { mutableStateOf(p.comment) }
+
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
             title = { Text("Редактировать трату") },
             text = {
                 Column {
@@ -493,24 +525,26 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                         val user = Firebase.auth.currentUser
                         if (user != null) {
                             val db = Firebase.firestore
-                            val userDoc = db.collection("users").document(user.uid)
-                            userDoc.get().addOnSuccessListener { snapshot ->
-                                val groupId = snapshot.getString("groupId")
-                                if (!groupId.isNullOrBlank()) {
-                                    db.collection("groups").document(groupId)
-                                        .collection("payments").document(p.id)
-                                        .update(mapOf("sum" to updatedSum, "comment" to newComment))
+                            user.uid.let { uid ->
+                                val userDoc = db.collection("users").document(uid)
+                                userDoc.get().addOnSuccessListener { snapshot ->
+                                    val groupId = snapshot.getString("groupId")
+                                    if (!groupId.isNullOrBlank()) {
+                                        db.collection("groups").document(groupId)
+                                            .collection("payments").document(p.id)
+                                            .update(mapOf("sum" to updatedSum, "comment" to newComment))
+                                    }
                                 }
                             }
                         }
                     }
-                    showEdit = false
+                    showEditDialog = false
                 }) {
                     Text("Сохранить")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEdit = false }) {
+                TextButton(onClick = { showEditDialog = false }) {
                     Text("Отмена")
                 }
             }
