@@ -2,11 +2,14 @@ package com.rich.familymoney.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
@@ -30,46 +33,50 @@ fun AddPaymentScreen(
 
     var sum by remember { mutableStateOf("") }
     var comment by remember { mutableStateOf("") }
+    var selectedDate by remember { mutableStateOf(Date()) }
+    var showDatePicker by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // КОММЕНТАРИЙ: Состояние для хранения даты и показа календаря
-    var selectedDate by remember { mutableStateOf(Date()) } // По умолчанию - сегодня
-    var showDatePicker by remember { mutableStateOf(false) }
     val sdf = remember { SimpleDateFormat("dd MMMM yyyy", Locale("ru")) }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Новая трата") }
-            )
+            TopAppBar(title = { Text("Новая трата") })
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .fillMaxSize()
         ) {
+            // Поля ввода теперь находятся в основной части Column
             OutlinedTextField(
                 value = sum,
                 onValueChange = { sum = it },
                 label = { Text("Сумма") },
                 singleLine = true,
-                enabled = !isLoading
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
+
+            Spacer(Modifier.height(8.dp))
+
             OutlinedTextField(
                 value = comment,
                 onValueChange = { comment = it },
                 label = { Text("Комментарий") },
-                singleLine = false,
-                maxLines = 3,
-                enabled = !isLoading
+                singleLine = true, // Сделано однострочным для единого дизайна
+                enabled = !isLoading,
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
             )
 
-            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 1 - Добавлено поле для выбора даты
-            // НОВЫЙ КОД:
+            Spacer(Modifier.height(8.dp))
+
+            // Поле для выбора даты
             Box {
                 OutlinedTextField(
                     value = sdf.format(selectedDate),
@@ -77,24 +84,28 @@ fun AddPaymentScreen(
                     label = { Text("Дата") },
                     trailingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Выбрать дату") },
                     modifier = Modifier.fillMaxWidth(),
-                    // КОММЕНТАРИЙ: Поле теперь активно, но ввод запрещён.
-                    // Это заставляет его выглядеть так же, как и остальные поля.
                     enabled = true,
                     readOnly = true
                 )
-                // КОММЕНТАРИЙ: Невидимая область для нажатий остаётся,
-                // чтобы гарантированно открывать календарь.
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .clickable { showDatePicker = true }
+                        .clickable { if (!isLoading) showDatePicker = true }
                 )
             }
 
+            // Распорка, чтобы кнопка всегда была внизу
+            Spacer(Modifier.weight(1f))
+
             if (errorText != null) {
-                Text(errorText!!, color = MaterialTheme.colorScheme.error)
+                Text(
+                    text = errorText!!,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
             }
 
+            // Кнопка Сохранить
             Button(
                 onClick = {
                     val parsedSum = sum.toDoubleOrNull()
@@ -102,9 +113,7 @@ fun AddPaymentScreen(
                         errorText = "Введите корректную сумму"
                         return@Button
                     }
-
-                    val uid = user?.uid
-                    if (uid == null || groupId == null) {
+                    if (user?.uid == null || groupId == null) {
                         errorText = "Ошибка пользователя или группы"
                         return@Button
                     }
@@ -112,15 +121,14 @@ fun AddPaymentScreen(
                     isLoading = true
                     scope.launch {
                         try {
-                            val userDoc = db.collection("users").document(uid).get().await()
+                            val userDoc = db.collection("users").document(user.uid).get().await()
                             val name = userDoc.getString("name") ?: "?"
                             val photoUrl = userDoc.getString("photoUrl") ?: ""
 
-                            // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 2 - При сохранении используется выбранная дата
                             val payment = hashMapOf(
                                 "sum" to parsedSum,
                                 "comment" to comment,
-                                "date" to selectedDate, // <-- ИЗМЕНЕНИЕ ЗДЕСЬ
+                                "date" to selectedDate,
                                 "name" to name,
                                 "photoUrl" to photoUrl
                             )
@@ -132,7 +140,6 @@ fun AddPaymentScreen(
                             withContext(Dispatchers.Main) {
                                 onBack()
                             }
-
                         } catch (e: Exception) {
                             withContext(Dispatchers.Main) {
                                 errorText = "Ошибка. Проверьте интернет и попробуйте снова."
@@ -142,7 +149,9 @@ fun AddPaymentScreen(
                     }
                 },
                 enabled = !isLoading,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
@@ -156,7 +165,7 @@ fun AddPaymentScreen(
         }
     }
 
-    // КОММЕНТАРИЙ: ИЗМЕНЕНИЕ 3 - Добавлен диалог с календарём
+    // Диалог с календарём
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.time)
         DatePickerDialog(
