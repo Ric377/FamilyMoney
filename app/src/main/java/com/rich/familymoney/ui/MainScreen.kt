@@ -1,4 +1,7 @@
 // app/src/main/java/com/rich/familymoney/ui/MainScreen.kt
+// Material3 и Foundation (для combinedClickable)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+
 package com.rich.familymoney.ui
 
 import android.net.Uri
@@ -51,7 +54,6 @@ import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     groupId: String,
@@ -632,12 +634,15 @@ private fun PaymentItem(
     if (showEditDialog) {
         var newSum by remember { mutableStateOf(p.sum.toString()) }
         var newComment by remember { mutableStateOf(p.comment) }
+        var selectedDate by remember { mutableStateOf(Date(p.date)) }
+        var showDatePicker by remember { mutableStateOf(false) }
+        val sdf_edit = remember { SimpleDateFormat("dd MMMM yyyy", Locale("ru")) }
 
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
             title = { Text("Редактировать трату") },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = newSum,
                         onValueChange = { newSum = it },
@@ -650,6 +655,38 @@ private fun PaymentItem(
                         label = { Text("Комментарий") },
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    // =======================================================
+                    // КОММЕНТАРИЙ: ИСПРАВЛЕНИЕ ЗДЕСЬ
+                    // =======================================================
+                    Box {
+                        OutlinedTextField(
+                            value = sdf_edit.format(selectedDate),
+                            onValueChange = {},
+                            label = { Text("Дата") },
+                            trailingIcon = { Icon(Icons.Default.CalendarMonth, "Выбрать дату") },
+                            modifier = Modifier.fillMaxWidth(),
+                            // Поле полностью отключается, чтобы не мешать нажатию
+                            enabled = false,
+                            // Но мы переопределяем цвета, чтобы оно не выглядело серым и неактивным
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                        // Поверх поля кладётся невидимая область для перехвата нажатий
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { showDatePicker = true }
+                        )
+                    }
+                    // =======================================================
+                    // КОНЕЦ ИСПРАВЛЕНИЯ
+                    // =======================================================
                 }
             },
             confirmButton = {
@@ -665,7 +702,11 @@ private fun PaymentItem(
                                 if (!groupId.isNullOrBlank()) {
                                     db.collection("groups").document(groupId)
                                         .collection("payments").document(p.id)
-                                        .update(mapOf("sum" to updatedSum, "comment" to newComment))
+                                        .update(mapOf(
+                                            "sum" to updatedSum,
+                                            "comment" to newComment,
+                                            "date" to selectedDate
+                                        ))
                                 }
                             }
                         }
@@ -692,6 +733,28 @@ private fun PaymentItem(
                 }
             }
         )
+
+        if (showDatePicker) {
+            val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.time)
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            datePickerState.selectedDateMillis?.let {
+                                selectedDate = Date(it)
+                            }
+                            showDatePicker = false
+                        }
+                    ) { Text("OK") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) { Text("Отмена") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
     }
 }
 
