@@ -258,7 +258,15 @@ fun MainScreen(
                     )
                 }
             },
-            floatingActionButton = { FloatingActionButton(onAddPaymentClick) { Text("+") } }
+            // НОВЫЙ КОД:
+            floatingActionButton = {
+                FloatingActionButton(onClick = onAddPaymentClick) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Добавить трату"
+                    )
+                }
+            }
         ) { padding ->
             if (state.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
