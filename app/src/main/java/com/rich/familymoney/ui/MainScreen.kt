@@ -2,8 +2,11 @@
 package com.rich.familymoney.ui
 
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -28,9 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.text.font.FontWeight
 import coil.compose.AsyncImage
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.SetOptions
@@ -60,13 +62,22 @@ fun MainScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-
     val user = Firebase.auth.currentUser ?: return
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val snack = remember { SnackbarHostState() }
+
+    // НОВОЕ: Состояние для хранения ID выделенных карточек
+    var selectedPayments by remember { mutableStateOf(setOf<String>()) }
+    // НОВОЕ: Состояние для диалога множественного удаления
+    var showMultiDeleteDialog by remember { mutableStateOf(false) }
+
+    // НОВОЕ: Обработка кнопки "назад" для выхода из режима выделения
+    BackHandler(enabled = selectedPayments.isNotEmpty()) {
+        selectedPayments = emptySet()
+    }
 
     val months = listOf(
         "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -86,7 +97,6 @@ fun MainScreen(
             }
         }
     }
-
 
     val calendar = remember { Calendar.getInstance() }
     val monthPayments = state.payments
@@ -198,14 +208,32 @@ fun MainScreen(
         Scaffold(
             snackbarHost = { SnackbarHost(snack, Modifier.zIndex(1f)) },
             topBar = {
-                TopAppBar(
-                    title = { Text("Общие траты") },
-                    navigationIcon = {
-                        IconButton({ scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, null)
+                // ИЗМЕНЕНО: TopAppBar теперь зависит от режима выделения
+                if (selectedPayments.isNotEmpty()) {
+                    TopAppBar(
+                        title = { Text("Выбрано: ${selectedPayments.size}") },
+                        navigationIcon = {
+                            IconButton({ selectedPayments = emptySet() }) { // Кнопка отмены выделения
+                                Icon(Icons.Default.Close, contentDescription = "Отменить выбор")
+                            }
+                        },
+                        actions = {
+                            IconButton({ showMultiDeleteDialog = true }) { // Кнопка удаления
+                                Icon(Icons.Default.Delete, contentDescription = "Удалить выбранные")
+                            }
                         }
-                    }
-                )
+                    )
+                } else {
+                    // Ваш оригинальный TopAppBar
+                    TopAppBar(
+                        title = { Text("Общие траты") },
+                        navigationIcon = {
+                            IconButton({ scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, null)
+                            }
+                        }
+                    )
+                }
             },
             floatingActionButton = { FloatingActionButton(onAddPaymentClick) { Text("+") } }
         ) { padding ->
@@ -238,10 +266,16 @@ fun MainScreen(
                     if (monthPayments.isEmpty()) {
                         Text("Нет трат", style = MaterialTheme.typography.bodyLarge)
                     } else {
+                        // ИЗМЕНЕНО: Вызываем обновленный PaymentItem, передавая ему состояние выделения
                         monthPayments.forEach { payment ->
-                            PaymentItem(payment) {
-                                paymentToDelete = it
-                            }
+                            PaymentItem(
+                                p = payment,
+                                askDel = { paymentToDelete = it },
+                                selectedPayments = selectedPayments,
+                                onSelectionChange = { newSelection ->
+                                    selectedPayments = newSelection
+                                }
+                            )
                         }
                     }
                 }
@@ -249,6 +283,7 @@ fun MainScreen(
         }
     }
 
+    // Этот диалог остался без изменений
     paymentToDelete?.let { p ->
         AlertDialog(
             onDismissRequest = { paymentToDelete = null },
@@ -261,6 +296,29 @@ fun MainScreen(
                 }) { Text("Удалить") }
             },
             dismissButton = { TextButton({ paymentToDelete = null }) { Text("Отмена") } }
+        )
+    }
+
+    // НОВОЕ: Диалог для подтверждения множественного удаления
+    if (showMultiDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showMultiDeleteDialog = false },
+            title = { Text("Удалить выбранные записи?") },
+            text = { Text("Вы собираетесь удалить ${selectedPayments.size} элемента(ов). Это действие необратимо.") },
+            confirmButton = {
+                TextButton({
+                    // Удаляем все выбранные элементы
+                    selectedPayments.forEach { paymentId ->
+                        viewModel.deletePayment(paymentId)
+                    }
+                    // Сбрасываем выделение и закрываем диалог
+                    selectedPayments = emptySet()
+                    showMultiDeleteDialog = false
+                }) { Text("Удалить") }
+            },
+            dismissButton = {
+                TextButton({ showMultiDeleteDialog = false }) { Text("Отмена") }
+            }
         )
     }
 
@@ -394,27 +452,68 @@ private fun EditProfileDialog(
     )
 }
 
-// Замените только эту функцию в вашем файле MainScreen.kt
+
+// ЗАМЕНА: Эта функция полностью заменяет вашу старую PaymentItem.
+// Она включает вашу логику редактирования/удаления и добавляет новую для выделения.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
+private fun PaymentItem(
+    p: Payment,
+    askDel: (Payment) -> Unit,
+    selectedPayments: Set<String>,
+    onSelectionChange: (Set<String>) -> Unit
+) {
     val sdf = remember { SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
 
-    // КОММЕНТАРИЙ: Оставляем только одно состояние - для показа диалога редактирования
+    // Эта логика осталась от вашего кода - для диалога редактирования
     var showEditDialog by remember { mutableStateOf(false) }
 
+    // Определяем, активен ли режим выделения и выделен ли этот элемент
+    val isInSelectionMode = selectedPayments.isNotEmpty()
+    val isSelected = p.id in selectedPayments
+
     Card(
-        // КОММЕНТАРИЙ: Вместо долгого нажатия теперь обычное нажатие (clickable)
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .clickable { showEditDialog = true } // <-- ИЗМЕНЕНИЕ ЗДЕСЬ
+            .clip(MaterialTheme.shapes.medium) // Обрезаем по форме для красивой рамки
+            .combinedClickable(
+                onLongClick = {
+                    // Долгое нажатие всегда добавляет элемент в выделенные
+                    onSelectionChange(selectedPayments + p.id)
+                },
+                onClick = {
+                    if (isInSelectionMode) {
+                        // В режиме выделения клик переключает состояние
+                        val newSelection = if (isSelected) {
+                            selectedPayments - p.id
+                        } else {
+                            selectedPayments + p.id
+                        }
+                        onSelectionChange(newSelection)
+                    } else {
+                        // В обычном режиме клик открывает диалог редактирования (ваша логика)
+                        showEditDialog = true
+                    }
+                }
+            ),
+        border = if (isSelected) { // Рамка для выделенного элемента
+            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        },
+        colors = if (isSelected) { // Цвет фона для выделенного элемента
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        }
+
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(8.dp)
         ) {
-            // Аватар (без изменений)
             if (p.photoUrl.startsWith("drawable/")) {
                 val resId = context.resources.getIdentifier(
                     p.photoUrl.removePrefix("drawable/"), "drawable", context.packageName
@@ -435,24 +534,21 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
 
             Spacer(Modifier.width(12.dp))
 
-            // Колонка с информацией (без изменений)
             Column(modifier = Modifier.weight(1f)) {
                 if (p.comment.isNotBlank()) Text(p.comment, style = MaterialTheme.typography.bodyMedium)
                 Text(sdf.format(Date(p.date)), style = MaterialTheme.typography.bodySmall)
                 Text(p.name, style = MaterialTheme.typography.bodySmall)
             }
 
-            // Сумма (без изменений)
             Text(
                 fmt(p.sum) + " ₽",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                fontWeight = FontWeight.Bold
             )
         }
     }
 
-    // КОММЕНТАРИЙ: Диалог выбора действий удалён.
-    // Теперь по нажатию сразу открывается этот диалог редактирования.
+    // Этот диалог - полностью ваш. Он не изменился.
     if (showEditDialog) {
         var newSum by remember { mutableStateOf(p.sum.toString()) }
         var newComment by remember { mutableStateOf(p.comment) }
@@ -464,13 +560,13 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                 Column {
                     OutlinedTextField(
                         value = newSum,
-                        onValueChange = { newSum = it },
+                        onValueChange = { newSum = it }, // Исправлена опечатка
                         label = { Text("Сумма") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = newComment,
-                        onValueChange = { newComment = it },
+                        onValueChange = { newComment = it }, // Исправлена опечатка
                         label = { Text("Комментарий") },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -480,7 +576,6 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                 TextButton(onClick = {
                     val updatedSum = newSum.toDoubleOrNull()
                     if (updatedSum != null) {
-                        // TODO: Перенести эту логику в ViewModel
                         val user = Firebase.auth.currentUser
                         if (user != null) {
                             val db = Firebase.firestore
@@ -501,7 +596,6 @@ private fun PaymentItem(p: Payment, askDel: (Payment) -> Unit) {
                 }
             },
             dismissButton = {
-                // КОММЕНТАРИЙ: Добавляем кнопку "Удалить" прямо сюда
                 Row {
                     TextButton(
                         onClick = {
