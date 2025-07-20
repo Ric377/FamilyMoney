@@ -4,6 +4,7 @@ const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
+// Вернем ваш регион, так как он работал
 setGlobalOptions({region: "europe-west1"});
 
 exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{paymentId}", async (event) => {
@@ -51,22 +52,31 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
         return;
     }
 
-    const payload = {
+    // ГОТОВИМ СООБЩЕНИЕ ДЛЯ НОВОГО МЕТОДА
+    const message = {
         data: {
             title: `Новая трата в группе!`,
             body: `${creatorName} добавил(а) трату на ${sum} ₽`,
         },
+        tokens: tokens, // Передаем токены здесь
     };
 
-    logger.log("Sending data message to tokens:", tokens);
-    const response = await admin.messaging().sendToDevice(tokens, payload);
+    logger.log("Sending multicast message to tokens:", tokens);
 
-    response.results.forEach((result, index) => {
-        const error = result.error;
-        if (error) {
-            logger.error("Failure sending notification to", tokens[index], error);
-        }
-    });
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Используем новый метод sendMulticast
+    const response = await admin.messaging().sendMulticast(message);
+
+    logger.log("Successfully sent message:", response);
+
+    if (response.failureCount > 0) {
+        const failedTokens = [];
+        response.responses.forEach((resp, idx) => {
+            if (!resp.success) {
+                failedTokens.push(tokens[idx]);
+            }
+        });
+        logger.log('List of tokens that caused failures: ' + failedTokens);
+    }
 
     return response;
 });
