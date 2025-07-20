@@ -100,6 +100,10 @@ fun MainScreen(
 
     var userName by remember { mutableStateOf(user.displayName ?: "") }
     var userPhoto by remember { mutableStateOf(user.photoUrl?.toString() ?: "") }
+    // Переменные состояния для управления видимостью диалоговых окон
+    var showLeaveGroupDialog by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(user.uid) {
         Firebase.firestore.collection("users").document(user.uid).addSnapshotListener { d, _ ->
             if (d != null && d.exists()) {
@@ -134,8 +138,9 @@ fun MainScreen(
                     showEditDialog = true
                 },
                 onNavigateToDebts = { navController.navigate("debt_screen/$groupId") },
-                onLeaveGroupClick = onLeaveGroupClick,
-                onLogoutClick = onLogoutClick
+                // Теперь передаем правильные параметры
+                onShowLeaveGroupDialog = { showLeaveGroupDialog = true },
+                onShowLogoutDialog = { showLogoutDialog = true }
             )
         }
     ) {
@@ -399,7 +404,49 @@ fun MainScreen(
             }
         )
     }
+    // Диалоговое окно для выхода из группы
+    if (showLeaveGroupDialog) {
+        AlertDialog(
+            onDismissRequest = { showLeaveGroupDialog = false },
+            icon = { Icon(Icons.Default.Group, contentDescription = null) },
+            title = { Text("Покинуть группу?") },
+            text = { Text("Вы уверены, что хотите выйти из текущей группы?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLeaveGroupDialog = false
+                        onLeaveGroupClick() // Выполняем само действие
+                    }
+                ) { Text("Да, выйти") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveGroupDialog = false }) { Text("Отмена") }
+            }
+        )
+    }
+
+// Диалоговое окно для выхода из аккаунта
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null) },
+            title = { Text("Выйти из аккаунта?") },
+            text = { Text("Вы уверены, что хотите выйти?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogoutClick() // Выполняем само действие
+                    }
+                ) { Text("Да, выйти") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Отмена") }
+            }
+        )
+    }
 }
+
 
 private fun fmt(v: Double) =
     if (v % 1.0 == 0.0) v.toInt().toString() else "%.2f".format(v)

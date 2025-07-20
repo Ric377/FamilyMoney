@@ -30,15 +30,15 @@ import com.rich.familymoney.viewmodel.MainScreenState // ИСПРАВЛЕНО: �
 
 @Composable
 fun MainDrawerContent(
-    state: MainScreenState, // ИСПРАВЛЕНО: Используем правильное имя класса
+    state: MainScreenState,
     userName: String,
     userPhoto: String,
     groupId: String,
     onCloseDrawer: () -> Unit,
     onEditProfileClick: () -> Unit,
     onNavigateToDebts: () -> Unit,
-    onLeaveGroupClick: () -> Unit,
-    onLogoutClick: () -> Unit
+    onShowLeaveGroupDialog: () -> Unit, // Комментарий убран, ошибка исправлена
+    onShowLogoutDialog: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -102,10 +102,9 @@ fun MainDrawerContent(
             // Участники
             if (state.members.isNotEmpty()) {
                 Text("Участники:", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
-                // ИСПРАВЛЕНО: Оборачиваем цикл в Column для создания Composable контекста
                 Column {
                     state.members.forEach { member ->
-                        MemberRow(member = member) // Выносим в отдельную функцию для чистоты
+                        MemberRow(member = member)
                     }
                 }
             }
@@ -126,7 +125,7 @@ fun MainDrawerContent(
                 selected = false,
                 onClick = {
                     onCloseDrawer()
-                    onLeaveGroupClick()
+                    onShowLeaveGroupDialog()
                 },
                 icon = { Icon(Icons.Default.Group, null) }
             )
@@ -135,7 +134,7 @@ fun MainDrawerContent(
                 selected = false,
                 onClick = {
                     onCloseDrawer()
-                    onLogoutClick()
+                    onShowLogoutDialog()
                 },
                 icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) }
             )
