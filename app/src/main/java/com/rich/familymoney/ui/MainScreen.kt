@@ -124,25 +124,10 @@ fun MainScreen(
         drawerState = drawerState,
         drawerContent = {
             Box(
-                modifier = Modifier.width(280.dp) // 1. ДЕЛАЕМ ШТОРКУ УЖЕ
+                modifier = Modifier.width(280.dp)
             ) {
                 ModalDrawerSheet {
-                    // 2. ДОБАВЛЯЕМ НАЗВАНИЕ ГРУППЫ СВЕРХУ
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = state.groupName.ifEmpty { "Название группы..." },
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // --- Дальше идет ваш существующий код шторки ---
-
+                    // 1. Блок пользователя теперь наверху
                     Row(
                         Modifier.fillMaxWidth().padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -168,19 +153,38 @@ fun MainScreen(
                         Text(userName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         Icon(Icons.Default.Edit, null, Modifier.clickable { showEditDialog = true })
                     }
+
+                    HorizontalDivider() // Разделитель для аккуратности
+
+                    // 2. Название группы перемещено сюда и сделано мельче
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
+                        Text(
+                            text = "Группа:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = state.groupName.ifEmpty { "Загрузка..." },
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // 3. Код группы остался на своем месте
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 16.dp, bottom = 8.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Код группы: $groupId", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        Text("Код: $groupId", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         IconButton({
                             clipboard.setText(AnnotatedString(groupId))
                             scope.launch { snack.showSnackbar("Код скопирован") }
-                        }) { Icon(Icons.Default.ContentCopy, null) }
+                        }) { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(20.dp)) }
                     }
 
+                    // --- Дальше идет ваш существующий код для участников и кнопок ---
                     if (state.members.isNotEmpty()) {
-                        Text("Участники:", Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
+                        Text("Участники:", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
                         state.members.forEach { member ->
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -207,8 +211,8 @@ fun MainScreen(
                                 Text(member.name)
                             }
                         }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                     }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                     NavigationDrawerItem(
                         label = { Text("Расчёт долгов") },
