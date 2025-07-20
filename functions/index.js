@@ -31,7 +31,8 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
     }
 
     // 2. Получаем список всех участников группы
-    const groupDoc = await admin.firestore().collection("groups").document(groupId).get();
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ: .document() заменено на .doc()
+    const groupDoc = await admin.firestore().collection("groups").doc(groupId).get();
     if (!groupDoc.exists) {
         logger.log("Group not found:", groupId);
         return;
@@ -62,14 +63,10 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
     }
 
     // 5. Создаём и отправляем уведомление
-    // ИЗМЕНЕНИЕ: Используем 'data' payload, чтобы onMessageReceived
-    // срабатывал всегда (и в фоне, и когда приложение открыто).
     const payload = {
         data: {
             title: `Новая трата в группе!`,
             body: `${creatorName} добавил(а) трату на ${sum} ₽`,
-            // Можно передавать и другие данные, например, ID группы или платежа
-            // groupId: groupId,
         },
     };
 
@@ -78,12 +75,11 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
     // Отправляем сообщение на все найденные токены
     const response = await admin.messaging().sendToDevice(tokens, payload);
 
-    // (Опционально) Добавляем обработку ошибок и удаление невалидных токенов
+    // (Опционально) Добавляем обработку ошибок
     response.results.forEach((result, index) => {
         const error = result.error;
         if (error) {
             logger.error("Failure sending notification to", tokens[index], error);
-            // Здесь можно добавить логику для удаления невалидного токена из Firestore
         }
     });
 
