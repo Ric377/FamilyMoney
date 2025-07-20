@@ -3,13 +3,14 @@ package com.rich.familymoney.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.ktx.auth // ИСПРАВЛЕНО: Добавлен импорт
+import com.google.firebase.ktx.Firebase    // ИСПРАВЛЕНО: Добавлен импорт
 import com.rich.familymoney.repository.GroupRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -22,9 +23,7 @@ class MainViewModel(
     val uiState: StateFlow<MainScreenState> = _uiState.asStateFlow()
 
     init {
-        // Загружаем название группы один раз
         loadGroupName()
-        // Отдельно запускаем прослушивание обновлений трат и участников
         listenToGroupUpdates()
     }
 
@@ -36,12 +35,10 @@ class MainViewModel(
     }
 
     private fun listenToGroupUpdates() {
-        // combine теперь только для двух потоков, которые постоянно обновляются
         combine(
             repository.getPayments(groupId),
             repository.getMembers(groupId)
         ) { payments, members ->
-            // Обновляем состояние, не трогая уже загруженное название
             _uiState.update { currentState ->
                 currentState.copy(
                     payments = payments,
@@ -49,7 +46,7 @@ class MainViewModel(
                     isLoading = false
                 )
             }
-        }.launchIn(viewModelScope) // <--- ИСПРАВЛЕНИЕ ЗДЕСЬ. Запускаем и "слушаем" поток.
+        }.launchIn(viewModelScope)
     }
 
     fun deletePayment(paymentId: String) {
@@ -68,6 +65,22 @@ class MainViewModel(
                 repository.deletePayments(groupId, paymentIds)
             } catch (e: Exception) {
                 // TODO: Обработать ошибку
+            }
+        }
+    }
+
+    fun leaveGroup(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            // ИСПРАВЛЕНО: Используем правильный вызов Firebase.auth
+            val uid = Firebase.auth.currentUser?.uid
+            if (uid != null) {
+                try {
+                    repository.leaveGroup(uid)
+                    // Вызываем коллбэк при успехе, чтобы сработала навигация
+                    onSuccess()
+                } catch (e: Exception) {
+                    // Здесь можно обработать ошибку, если не удалось покинуть группу
+                }
             }
         }
     }

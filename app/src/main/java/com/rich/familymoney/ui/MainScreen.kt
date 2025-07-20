@@ -123,121 +123,20 @@ fun MainScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            Box(
-                modifier = Modifier.width(280.dp)
-            ) {
-                ModalDrawerSheet {
-                    // 1. Блок пользователя теперь наверху
-                    Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (userPhoto.startsWith("drawable/")) {
-                            val resId = context.resources.getIdentifier(
-                                userPhoto.removePrefix("drawable/"), "drawable", context.packageName
-                            )
-                            Image(
-                                painter = painterResource(id = resId),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(48.dp).clip(CircleShape)
-                            )
-                        } else {
-                            AsyncImage(
-                                userPhoto, null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(48.dp).clip(CircleShape)
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Text(userName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        Icon(Icons.Default.Edit, null, Modifier.clickable { showEditDialog = true })
-                    }
-
-                    HorizontalDivider() // Разделитель для аккуратности
-
-                    // 2. Название группы перемещено сюда и сделано мельче
-                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
-                        Text(
-                            text = "Группа:",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = state.groupName.ifEmpty { "Загрузка..." },
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // 3. Код группы остался на своем месте
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Код: $groupId", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        IconButton({
-                            clipboard.setText(AnnotatedString(groupId))
-                            scope.launch { snack.showSnackbar("Код скопирован") }
-                        }) { Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(20.dp)) }
-                    }
-
-                    // --- Дальше идет ваш существующий код для участников и кнопок ---
-                    if (state.members.isNotEmpty()) {
-                        Text("Участники:", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
-                        state.members.forEach { member ->
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (member.photoUrl.startsWith("drawable/")) {
-                                    val resId = LocalContext.current.resources.getIdentifier(
-                                        member.photoUrl.removePrefix("drawable/"), "drawable", LocalContext.current.packageName
-                                    )
-                                    Image(
-                                        painter = painterResource(id = resId),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(32.dp).clip(CircleShape)
-                                    )
-                                } else if (member.photoUrl.isNotBlank()) {
-                                    AsyncImage(
-                                        member.photoUrl, null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.size(32.dp).clip(CircleShape)
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                Text(member.name)
-                            }
-                        }
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    NavigationDrawerItem(
-                        label = { Text("Расчёт долгов") },
-                        selected = false,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate("debt_screen/$groupId")
-                        },
-                        icon = { Icon(Icons.Default.Calculate, null) }
-                    )
-
-                    NavigationDrawerItem(
-                        label = { Text("Сменить группу") },
-                        selected = false,
-                        onClick = { scope.launch { drawerState.close(); onLeaveGroupClick() } },
-                        icon = { Icon(Icons.Default.Group, null) }
-                    )
-                    NavigationDrawerItem(
-                        label = { Text("Выйти") },
-                        selected = false,
-                        onClick = { scope.launch { drawerState.close(); onLogoutClick() } },
-                        icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, null) }
-                    )
-                }
-            }
+            MainDrawerContent(
+                state = state,
+                userName = userName,
+                userPhoto = userPhoto,
+                groupId = groupId,
+                onCloseDrawer = { scope.launch { drawerState.close() } },
+                onEditProfileClick = {
+                    scope.launch { drawerState.close() }
+                    showEditDialog = true
+                },
+                onNavigateToDebts = { navController.navigate("debt_screen/$groupId") },
+                onLeaveGroupClick = onLeaveGroupClick,
+                onLogoutClick = onLogoutClick
+            )
         }
     ) {
         Scaffold(

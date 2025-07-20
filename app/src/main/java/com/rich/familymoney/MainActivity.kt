@@ -126,6 +126,11 @@ class MainActivity : ComponentActivity() {
                                 groupId = currentGroupId,
                                 onLogoutClick = {
                                     authRepository.logout(this@MainActivity)
+                                },
+                                // При выходе из группы просто обнуляем groupId.
+                                // Compose автоматически переключит экран на JoinGroupScreen.
+                                onGroupLeft = {
+                                    groupId = null
                                 }
                             )
                         } else {

@@ -115,4 +115,10 @@ class GroupRepository {
             "Ошибка загрузки: ${e.message}"
         }
     }
+    suspend fun leaveGroup(uid: String) {
+        // Обновляем поле groupId на null
+        db.collection("users").document(uid)
+            .update("groupId", null)
+            .await()
+    }
 }
