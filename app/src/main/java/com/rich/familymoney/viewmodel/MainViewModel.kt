@@ -71,15 +71,14 @@ class MainViewModel(
 
     fun leaveGroup(onSuccess: () -> Unit) {
         viewModelScope.launch {
-            // ИСПРАВЛЕНО: Используем правильный вызов Firebase.auth
             val uid = Firebase.auth.currentUser?.uid
             if (uid != null) {
                 try {
-                    repository.leaveGroup(uid)
-                    // Вызываем коллбэк при успехе, чтобы сработала навигация
+                    // ИСПРАВЛЕНИЕ: Прямое обращение к свойству класса groupId
+                    repository.leaveGroup(uid, groupId)
                     onSuccess()
                 } catch (e: Exception) {
-                    // Здесь можно обработать ошибку, если не удалось покинуть группу
+                    // Здесь можно обработать ошибку
                 }
             }
         }

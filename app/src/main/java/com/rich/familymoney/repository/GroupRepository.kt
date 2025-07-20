@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.firestore.FieldValue
 import java.util.*
 
 data class GroupMember(val name: String, val photoUrl: String, val email: String)
@@ -115,10 +116,32 @@ class GroupRepository {
             "Ошибка загрузки: ${e.message}"
         }
     }
-    suspend fun leaveGroup(uid: String) {
-        // Обновляем поле groupId на null
-        db.collection("users").document(uid)
-            .update("groupId", null)
-            .await()
+    suspend fun leaveGroup(uid: String, groupId: String) {
+        // Получаем документ пользователя, чтобы знать, какие данные удалять из списка
+        val userDoc = db.collection("users").document(uid).get().await()
+        val userEmail = userDoc.getString("email") ?: ""
+        val userName = userDoc.getString("name") ?: ""
+        val userPhotoUrl = userDoc.getString("photoUrl") ?: ""
+
+        // Создаем точную копию объекта, который хранится в массиве 'members'
+        val memberMapToRemove = mapOf(
+            "email" to userEmail,
+            "name" to userName,
+            "photoUrl" to userPhotoUrl
+        )
+
+        // Используем WriteBatch для выполнения двух операций как одной транзакции
+        val batch = db.batch()
+
+        // Операция 1: Удаляем пользователя из массива 'members' в документе группы
+        val groupDocRef = db.collection("groups").document(groupId)
+        batch.update(groupDocRef, "members", FieldValue.arrayRemove(memberMapToRemove))
+
+        // Операция 2: Обнуляем groupId в документе пользователя
+        val userDocRef = db.collection("users").document(uid)
+        batch.update(userDocRef, "groupId", null)
+
+        // Выполняем обе операции
+        batch.commit().await()
     }
 }
