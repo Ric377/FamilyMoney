@@ -9,6 +9,7 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.rich.familymoney.R
@@ -17,51 +18,39 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
-        Log.d("FCM", "From: ${remoteMessage.from}")
+        Log.d(TAG, "From: ${remoteMessage.from}")
 
-        // ИЗМЕНЕНИЕ: Теперь мы в первую очередь обрабатываем 'data' payload,
-        // так как он будет приходить всегда.
+        // Обрабатываем data payload, который приходит от нашей облачной функции
         if (remoteMessage.data.isNotEmpty()) {
-            Log.d("FCM", "Message Data payload: " + remoteMessage.data)
+            Log.d(TAG, "Message Data payload: " + remoteMessage.data)
 
-            // Извлекаем title и body из data
             val title = remoteMessage.data["title"]
             val body = remoteMessage.data["body"]
 
-            // Вызываем нашу функцию для показа уведомления
             sendNotification(title, body)
         } else {
-            // Оставляем обработку 'notification' payload на случай,
-            // если отправляем тестовое уведомление из консоли Firebase.
+            // Обрабатываем notification payload (например, для тестов из консоли Firebase)
             remoteMessage.notification?.let { notification ->
-                Log.d("FCM", "Notification Message Body: ${notification.body}")
+                Log.d(TAG, "Notification Message Body: ${notification.body}")
                 sendNotification(notification.title, notification.body)
             }
         }
     }
 
+    /**
+     * Вызывается, когда система выдает новый или обновляет существующий токен.
+     */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d("FCM", "Refreshed token: $token")
+        Log.d(TAG, "Refreshed token: $token")
+        // Вызываем нашу новую общую функцию для сохранения токена
         sendTokenToFirestore(token)
     }
 
-    private fun sendTokenToFirestore(token: String?) {
-        if (token == null) return
-        // Важно: токен может обновиться до того, как пользователь вошел в систему.
-        // Лучше всего вызывать эту функцию также и после успешного входа.
-        val userId = Firebase.auth.currentUser?.uid ?: return
-
-        val userDoc = Firebase.firestore.collection("users").document(userId)
-        userDoc.update("fcmToken", token)
-            .addOnSuccessListener { Log.d("FCM", "Token updated in Firestore") }
-            .addOnFailureListener { e -> Log.w("FCM", "Error updating token", e) }
-    }
-
     private fun sendNotification(title: String?, messageBody: String?) {
-        val channelId = "default_channel_id" // Убедитесь, что ID канала консистентен
+        val channelId = "default_channel_id"
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // ВАЖНО: Убедитесь, что эта иконка существует!
+            .setSmallIcon(R.drawable.ic_launcher_foreground) // Убедитесь, что иконка существует
             .setContentTitle(title)
             .setContentText(messageBody)
             .setAutoCancel(true)
@@ -73,15 +62,51 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Default Channel Name", // Дайте каналу осмысленное имя
+                "Default Channel Name",
                 NotificationManager.IMPORTANCE_HIGH
             )
             notificationManager.createNotificationChannel(channel)
         }
 
-        // У каждого уведомления должен быть уникальный ID, если вы хотите показывать несколько одновременно.
-        // Использование 0 перезапишет предыдущее уведомление.
         val notificationId = System.currentTimeMillis().toInt()
         notificationManager.notify(notificationId, notificationBuilder.build())
+    }
+
+    /**
+     * Companion object содержит "статические" методы,
+     * которые можно вызывать из других классов без создания экземпляра сервиса.
+     */
+    companion object {
+        private const val TAG = "FCM_SERVICE"
+
+        /**
+         * Получает актуальный токен и сохраняет его в Firestore.
+         * Эту функцию мы вызываем из MainActivity после входа пользователя.
+         */
+        fun updateTokenAfterLogin() {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                Log.d(TAG, "Got token after login: $token")
+                sendTokenToFirestore(token)
+            }
+        }
+
+        /**
+         * Централизованная функция для сохранения токена в Firestore.
+         */
+        private fun sendTokenToFirestore(token: String?) {
+            if (token == null) return
+
+            // Убедимся, что пользователь вошел в систему, чтобы знать, к какому документу привязать токен
+            val userId = Firebase.auth.currentUser?.uid
+            if (userId == null) {
+                Log.w(TAG, "Cannot save token, user is not logged in.")
+                return
+            }
+
+            val userDoc = Firebase.firestore.collection("users").document(userId)
+            userDoc.update("fcmToken", token)
+                .addOnSuccessListener { Log.d(TAG, "Token updated successfully in Firestore") }
+                .addOnFailureListener { e -> Log.w(TAG, "Error updating token", e) }
+        }
     }
 }

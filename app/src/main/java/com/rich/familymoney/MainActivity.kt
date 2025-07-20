@@ -23,6 +23,7 @@ import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.rich.familymoney.repository.AuthRepository
+import com.rich.familymoney.services.MyFirebaseMessagingService
 import com.rich.familymoney.ui.AuthScreen
 import com.rich.familymoney.ui.JoinGroupScreen
 import com.rich.familymoney.ui.MainNavigation
@@ -30,11 +31,9 @@ import com.rich.familymoney.ui.theme.FamilyMoneyTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-// ЗАМЕНИТЕ ВЕСЬ КЛАСС MainActivity НА ЭТОТ КОД:
 class MainActivity : ComponentActivity() {
     private val authRepository = AuthRepository()
 
-    // КОММЕНТАРИЙ: Код для запроса разрешений. Он на своём месте.
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -49,11 +48,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // КОММЕНТАРИЙ: Теперь у нас только ОДИН метод onCreate, как и должно быть.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // КОММЕНТАРИЙ: Вызов запроса разрешений теперь находится здесь, в правильном месте.
         askNotificationPermission()
 
         val auth = Firebase.auth
@@ -70,7 +67,11 @@ class MainActivity : ComponentActivity() {
             val data = result.data
             if (result.resultCode == RESULT_OK && data != null) {
                 lifecycleScope.launch {
-                    authRepository.handleGoogleSignInResult(data)
+                    val success = authRepository.handleGoogleSignInResult(data)
+                    if (success) {
+                        // Вызываем обновление токена после успешного входа
+                        MyFirebaseMessagingService.updateTokenAfterLogin()
+                    }
                 }
             }
         }
@@ -94,6 +95,9 @@ class MainActivity : ComponentActivity() {
                     groupId = null
                     currentUser?.uid?.let { uid ->
                         try {
+                            // Вызываем обновление токена, как только определили пользователя
+                            MyFirebaseMessagingService.updateTokenAfterLogin()
+
                             val document = db.collection("users").document(uid).get().await()
                             groupId = document.getString("groupId")
                         } catch (e: Exception) {
