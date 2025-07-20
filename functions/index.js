@@ -4,7 +4,6 @@ const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
-// Вернем ваш регион, так как он работал
 setGlobalOptions({region: "europe-west1"});
 
 exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{paymentId}", async (event) => {
@@ -52,21 +51,22 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
         return;
     }
 
-    // ГОТОВИМ СООБЩЕНИЕ ДЛЯ НОВОГО МЕТОДА
-    const message = {
+    // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+    // Готовим массив сообщений, по одному на каждый токен
+    const messages = tokens.map(token => ({
+        token: token,
         data: {
             title: `Новая трата в группе!`,
             body: `${creatorName} добавил(а) трату на ${sum} ₽`,
         },
-        tokens: tokens, // Передаем токены здесь
-    };
+    }));
 
-    logger.log("Sending multicast message to tokens:", tokens);
+    logger.log(`Preparing to send ${messages.length} messages.`);
 
-    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Используем новый метод sendMulticast
-    const response = await admin.messaging().sendMulticast(message);
+    // ИСПОЛЬЗУЕМ МЕТОД sendEach
+    const response = await admin.messaging().sendEach(messages);
 
-    logger.log("Successfully sent message:", response);
+    logger.log("Successfully sent messages:", response);
 
     if (response.failureCount > 0) {
         const failedTokens = [];
