@@ -1,5 +1,3 @@
-// D:/Android/Projects/FamilyMoney/functions/index.js
-
 const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const logger = require("firebase-functions/logger");
@@ -8,12 +6,7 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 setGlobalOptions({region: "europe-west1"});
 
-/**
- * Триггер, который срабатывает при создании нового документа
- * в любой подколлекции 'payments'.
- */
 exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{paymentId}", async (event) => {
-    // 1. Получаем данные о новой трате
     const snap = event.data;
     if (!snap) {
         logger.log("No data associated with the event");
@@ -30,8 +23,6 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
         return;
     }
 
-    // 2. Получаем список всех участников группы
-    // ИСПРАВЛЕНИЕ ЗДЕСЬ: .document() заменено на .doc()
     const groupDoc = await admin.firestore().collection("groups").doc(groupId).get();
     if (!groupDoc.exists) {
         logger.log("Group not found:", groupId);
@@ -39,7 +30,6 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
     }
     const members = groupDoc.data().members;
 
-    // 3. Находим email всех, кому нужно отправить уведомление (все, кроме создателя)
     const recipientEmails = members
         .map((member) => member.email)
         .filter((email) => email !== creatorEmail);
@@ -49,20 +39,18 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
         return;
     }
 
-    // 4. Находим их FCM токены в базе
     const usersRef = admin.firestore().collection("users");
     const recipientUsersSnapshot = await usersRef.where("email", "in", recipientEmails).get();
 
     const tokens = recipientUsersSnapshot.docs
         .map((doc) => doc.data().fcmToken)
-        .filter((token) => token); // Отсеиваем пустые или отсутствующие токены
+        .filter((token) => token);
 
     if (tokens.length === 0) {
         logger.log("No FCM tokens found for any recipients.");
         return;
     }
 
-    // 5. Создаём и отправляем уведомление
     const payload = {
         data: {
             title: `Новая трата в группе!`,
@@ -71,11 +59,8 @@ exports.sendPaymentNotification = onDocumentCreated("groups/{groupId}/payments/{
     };
 
     logger.log("Sending data message to tokens:", tokens);
-
-    // Отправляем сообщение на все найденные токены
     const response = await admin.messaging().sendToDevice(tokens, payload);
 
-    // (Опционально) Добавляем обработку ошибок
     response.results.forEach((result, index) => {
         const error = result.error;
         if (error) {
