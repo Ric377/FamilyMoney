@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class MainViewModel(
@@ -19,25 +22,42 @@ class MainViewModel(
     val uiState: StateFlow<MainScreenState> = _uiState.asStateFlow()
 
     init {
-        loadGroupData()
+        // Загружаем название группы один раз
+        loadGroupName()
+        // Отдельно запускаем прослушивание обновлений трат и участников
+        listenToGroupUpdates()
     }
 
-    private fun loadGroupData() {
+    private fun loadGroupName() {
         viewModelScope.launch {
-            // Используем combine, чтобы объединить два потока данных (траты и участники)
-            combine(
-                repository.getPayments(groupId),
-                repository.getMembers(groupId)
-            ) { payments, members ->
-                // Когда приходят новые данные из любого потока,
-                // обновляем общее состояние экрана
-                MainScreenState(
+            val name = repository.getGroupName(groupId)
+            _uiState.update { it.copy(groupName = name) }
+        }
+    }
+
+    private fun listenToGroupUpdates() {
+        // combine теперь только для двух потоков, которые постоянно обновляются
+        combine(
+            repository.getPayments(groupId),
+            repository.getMembers(groupId)
+        ) { payments, members ->
+            // Обновляем состояние, не трогая уже загруженное название
+            _uiState.update { currentState ->
+                currentState.copy(
                     payments = payments,
                     members = members,
-                    isLoading = false // Загрузка завершена
+                    isLoading = false
                 )
-            }.collect { newState ->
-                _uiState.value = newState
+            }
+        }.launchIn(viewModelScope) // <--- ИСПРАВЛЕНИЕ ЗДЕСЬ. Запускаем и "слушаем" поток.
+    }
+
+    fun deletePayment(paymentId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deletePayment(groupId, paymentId)
+            } catch (e: Exception) {
+                // TODO: Обработать ошибку удаления
             }
         }
     }
@@ -48,16 +68,6 @@ class MainViewModel(
                 repository.deletePayments(groupId, paymentIds)
             } catch (e: Exception) {
                 // TODO: Обработать ошибку
-            }
-        }
-    }
-
-    fun deletePayment(paymentId: String) {
-        viewModelScope.launch {
-            try {
-                repository.deletePayment(groupId, paymentId)
-            } catch (e: Exception) {
-                // TODO: Обработать ошибку удаления (например, показать Snackbar)
             }
         }
     }

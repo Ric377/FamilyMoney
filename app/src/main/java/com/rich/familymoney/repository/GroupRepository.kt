@@ -106,4 +106,13 @@ class GroupRepository {
             .collection("payments").document(paymentId)
             .delete()
     }
+    suspend fun getGroupName(groupId: String): String {
+        return try {
+            // Используем get() для получения документа один раз
+            val document = db.collection("groups").document(groupId).get().await()
+            document.getString("name") ?: "Без названия"
+        } catch (e: Exception) {
+            "Ошибка загрузки: ${e.message}"
+        }
+    }
 }
