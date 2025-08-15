@@ -51,6 +51,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        try {
+            val info = packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.GET_SIGNATURES)
+            for (signature in info.signatures) {
+                val md = java.security.MessageDigest.getInstance("SHA-1")
+                md.update(signature.toByteArray())
+                val sha1 = md.digest()
+                val hexString = StringBuilder()
+                for (b in sha1) {
+                    hexString.append(String.format("%02X:", b))
+                }
+                val hex = hexString.toString().substring(0, hexString.length - 1)
+                android.util.Log.e("MY_SHA1_KEY", "SHA-1 key: $hex")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MY_SHA1_KEY", "Error getting SHA-1 key", e)
+        }
+
         askNotificationPermission()
 
         val auth = Firebase.auth

@@ -14,19 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "965519537654-dl16is8gan0s6sh06fsb73oiueagbbae.apps.googleusercontent.com",
+          "client_id": "965519537654-o5npp2s1uiikhvm5bvkg4nu8ig5tb6ao.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.rich.familymoney",
-            "certificate_hash": "f13b26fbcd86fa584f7d9e8a6c42e1de1e898c9a"
-          }
-        },
-        {
-          "client_id": "965519537654-lptuhm09f8iu2a6i545r77f15vm1ufhf.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.rich.familymoney",
-            "certificate_hash": "90c36e6cfa031ab0d5172c1a499b98ea186bbaca"
+            "certificate_hash": "8d092c9a34dc4d7e8a476a243eabe1aae268c93c"
           }
         },
         {
