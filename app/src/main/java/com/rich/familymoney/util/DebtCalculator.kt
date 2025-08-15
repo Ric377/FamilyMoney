@@ -1,5 +1,5 @@
 // DebtCalculator.kt
-package com.rich.familymoney.util // Можете выбрать другую папку, например, com.rich.familymoney.logic
+package com.rich.familymoney.util
 
 import com.rich.familymoney.data.Payment
 import com.rich.familymoney.repository.GroupMember
@@ -7,66 +7,79 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.math.abs
 
-// 1. Модель данных, описывающая один долг
 data class Debt(
-    val from: String,   // Кто должен
-    val to: String,     // Кому должен
-    val amount: Double  // Сколько
+    val from: String,
+    val to: String,
+    val amount: Double
 )
 
-// 2. Основная функция-калькулятор
+// НОВАЯ, ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
 fun calculateDebts(payments: List<Payment>, members: List<GroupMember>): List<Debt> {
-    if (members.isEmpty() || payments.isEmpty()) {
+    if (members.isEmpty()) {
         return emptyList()
     }
 
-    // Используем BigDecimal для точных финансовых расчётов, чтобы избежать ошибок с Double
-    val totalSpent = payments.sumOf { BigDecimal.valueOf(it.sum) }
-    val sharePerPerson = totalSpent.divide(BigDecimal(members.size), 2, RoundingMode.HALF_UP)
-
-    // Считаем, сколько каждый участник заплатил
+    // 1. Считаем, сколько каждый участник заплатил
     val amountPaidByMember = payments.groupBy { it.name }
-        .mapValues { (_, payments) ->
-            payments.sumOf { BigDecimal.valueOf(it.sum) }
+        .mapValues { (_, userPayments) ->
+            userPayments.sumOf { BigDecimal.valueOf(it.sum) }
         }
 
-    // Считаем баланс каждого: (сколько заплатил) - (сколько должен был заплатить)
+    // 2. Считаем, сколько всего потрачено и долю каждого
+    val totalSpent = payments.sumOf { BigDecimal.valueOf(it.sum) }
+    // Делим с большим количеством знаков после запятой для точности
+    val sharePerPerson = totalSpent.divide(BigDecimal(members.size), 10, RoundingMode.HALF_UP)
+
+    // 3. Считаем баланс для каждого участника
+    // Баланс = (сколько заплатил) - (сколько должен был заплатить)
     val balances = members.associate { member ->
         val paid = amountPaidByMember[member.name] ?: BigDecimal.ZERO
         member.name to (paid - sharePerPerson)
     }.toMutableMap()
 
-    // Разделяем на тех, кто переплатил (кредиторы), и тех, кто недоплатил (должники)
+    // 4. Разделяем на тех, кто переплатил (кредиторы), и тех, кто недоплатил (должники)
     val creditors = balances.filter { it.value > BigDecimal.ZERO }.toMutableMap()
     val debtors = balances.filter { it.value < BigDecimal.ZERO }.toMutableMap()
 
     val debts = mutableListOf<Debt>()
 
-    // Алгоритм погашения долгов
+    // 5. ОПТИМАЛЬНЫЙ АЛГОРИТМ УРЕГУЛИРОВАНИЯ ДОЛГОВ
+    // Пока есть и должники, и кредиторы, мы будем сводить их балансы
     while (debtors.isNotEmpty() && creditors.isNotEmpty()) {
+        // Берем первого должника и первого кредитора
         val debtorEntry = debtors.entries.first()
         val creditorEntry = creditors.entries.first()
 
         val debtorName = debtorEntry.key
+        val debtorAmount = debtorEntry.value.abs() // Сколько он должен (положительное число)
+
         val creditorName = creditorEntry.key
+        val creditorAmount = creditorEntry.value   // Сколько ему должны
 
-        // Сумма перевода — минимальная из двух сумм (долга и переплаты)
-        val amountToTransfer = minOf(abs(debtorEntry.value.toDouble()), creditorEntry.value.toDouble())
-        val transferBigDecimal = BigDecimal.valueOf(amountToTransfer)
+        // Сумма перевода — это наименьшее из двух значений: долга и кредита
+        val transferAmount = debtorAmount.min(creditorAmount)
 
-        if (amountToTransfer > 0.001) { // Избегаем нулевых переводов из-за ошибок округления
-            debts.add(Debt(from = debtorName, to = creditorName, amount = amountToTransfer))
-
-            // Обновляем балансы
-            debtors[debtorName] = debtorEntry.value + transferBigDecimal
-            creditors[creditorName] = creditorEntry.value - transferBigDecimal
+        // Создаем запись о долге, если сумма значима
+        if (transferAmount > BigDecimal("0.01")) {
+            debts.add(Debt(
+                from = debtorName,
+                to = creditorName,
+                // Округляем до 2 знаков только в самом конце, для отображения
+                amount = transferAmount.setScale(2, RoundingMode.HALF_UP).toDouble()
+            ))
         }
 
-        // Удаляем из списка тех, чей баланс стал нулевым
-        if (abs(debtors[debtorName]!!.toDouble()) < 0.01) {
+        // 6. Обновляем балансы
+        // Уменьшаем долг должника и кредит кредитора на сумму перевода
+        balances[debtorName] = (balances[debtorName] ?: BigDecimal.ZERO) + transferAmount
+        balances[creditorName] = (balances[creditorName] ?: BigDecimal.ZERO) - transferAmount
+
+        // 7. Удаляем из списков тех, кто полностью рассчитался
+        // Используем compareTo для точного сравнения с нулем
+        if (balances[debtorName]!!.abs().compareTo(BigDecimal("0.01")) < 0) {
             debtors.remove(debtorName)
         }
-        if (abs(creditors[creditorName]!!.toDouble()) < 0.01) {
+        if (balances[creditorName]!!.abs().compareTo(BigDecimal("0.01")) < 0) {
             creditors.remove(creditorName)
         }
     }
